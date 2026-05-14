@@ -65,8 +65,13 @@
   button {
     background: #7bbf2a; color: #1a2e0a;
     border: 3px solid #2c4a0e; border-radius: 10px;
-    padding: 12px 22px; font-size: 18px; font-weight: bold;
+    padding: 14px 28px; font-size: 20px; font-weight: bold;
     cursor: pointer; box-shadow: 0 4px 0 #2c4a0e;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
   }
   button:hover { background: #94d83a; }
   button:active { transform: translateY(2px); box-shadow: 0 2px 0 #2c4a0e; }
@@ -1173,9 +1178,14 @@
     overlay.classList.remove('hidden');
   }
 
-  startBtn.addEventListener('click', start);
+  startBtn.addEventListener('click', (e) => { e.stopPropagation(); start(); });
+  // Tap ANYWHERE on the overlay to start (mobile-friendly)
+  overlay.addEventListener('click', () => { if (state !== 'playing') start(); });
+  overlay.addEventListener('touchend', (e) => {
+    if (state !== 'playing') { e.preventDefault(); start(); }
+  }, { passive: false });
   window.addEventListener('keydown', e => {
-    if ((state !== 'playing') && (e.code === 'Enter')) {
+    if ((state !== 'playing') && (e.code === 'Enter' || e.code === 'Space')) {
       e.preventDefault(); start();
     }
   });

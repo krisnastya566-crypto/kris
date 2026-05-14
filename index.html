@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Agar.io — Kris Edition</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #0e1116;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #fff; user-select: none;
+  }
+  canvas { display: block; cursor: crosshair; }
+
+  /* ---- HUD ---- */
+  #hud {
+    position: fixed; top: 12px; left: 12px;
+    display: flex; gap: 10px; align-items: center;
+    pointer-events: none;
+    text-shadow: 0 1px 2px rgba(0,0,0,.6);
+  }
+  #hud .badge {
+    background: rgba(20,24,32,.65);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px; padding: 8px 12px;
+    font-size: 14px; backdrop-filter: blur(6px);
+  }
+  #hud .badge b { color: #7ee0ff; }
+
+  #leaderboard {
+    position: fixed; top: 12px; right: 12px;
+    width: 220px;
+    background: rgba(20,24,32,.65);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 12px; padding: 10px 12px;
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+  #leaderboard h3 {
+    margin: 0 0 8px 0; font-size: 13px; letter-spacing: .08em;
+    color: #aab; text-transform: uppercase;
+  }
+  #leaderboard ol { margin: 0; padding-left: 22px; font-size: 13px; }
+  #leaderboard li { padding: 2px 0; }
+  #leaderboard li.me { color: #7ee0ff; font-weight: 700; }
+
+  #hint {
+    position: fixed; bottom: 12px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20,24,32,.65);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px; padding: 6px 12px;
+    font-size: 12px; color: #cdd; pointer-events: none;
+  }
+
+  /* ---- Overlays ---- */
+  .overlay {
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(20,30,50,.7), rgba(8,10,14,.92));
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10;
+  }
+  .panel {
+    width: min(92vw, 420px);
+    background: linear-gradient(180deg, #1a2230, #131820);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px; padding: 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    text-align: center;
+  }
+  .panel h1 {
+    margin: 0 0 6px; font-size: 28px; letter-spacing: .02em;
+    background: linear-gradient(90deg,#7ee0ff,#a07dff);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+  }
+  .panel p { margin: 6px 0 16px; color: #aab; font-size: 14px; }
+  .panel input {
+    width: 100%; padding: 12px 14px; font-size: 16px;
+    border-radius: 10px; border: 1px solid rgba(255,255,255,.12);
+    background: #0d1118; color: #fff; outline: none;
+    margin-bottom: 12px;
+  }
+  .panel input:focus { border-color: #7ee0ff; }
+  .panel button {
+    width: 100%; padding: 12px 14px; font-size: 16px; font-weight: 700;
+    border-radius: 10px; border: 0;
+    background: linear-gradient(90deg,#7ee0ff,#a07dff);
+    color: #0a0f17; cursor: pointer;
+    transition: transform .06s ease;
+  }
+  .panel button:hover { transform: translateY(-1px); }
+  .panel .keys {
+    display: flex; gap: 8px; justify-content: center; margin-top: 16px;
+    color: #9aa; font-size: 12px;
+  }
+  .panel .keys span {
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.08);
+    padding: 4px 8px; border-radius: 6px;
+  }
+  .panel .keys b { color: #fff; }
+
+  #deathPanel .stat { color:#7ee0ff; font-size: 22px; font-weight: 700; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div class="badge">Масса: <b id="mass">10</b></div>
+  <div class="badge">Счёт: <b id="score">0</b></div>
+</div>
+
+<div id="leaderboard">
+  <h3>Лидеры</h3>
+  <ol id="lbList"></ol>
+</div>
+
+<div id="hint">Мышь — двигаться · <b>Space</b> — расщепиться · <b>W</b> — выбросить массу</div>
+
+<!-- Start screen -->
+<div id="startPanel" class="overlay">
+  <div class="panel">
+    <h1>Agar.io</h1>
+    <p>Ешь шарики, ешь врагов. Расти. Не дай съесть себя.</p>
+    <input id="nameInput" maxlength="14" placeholder="Твой ник" />
+    <button id="playBtn">Играть</button>
+    <div class="keys">
+      <span><b>Mouse</b> двигаться</span>
+      <span><b>Space</b> сплит</span>
+      <span><b>W</b> выброс</span>
+    </div>
+  </div>
+</div>
+
+<!-- Death screen -->
+<div id="deathPanel" class="overlay hidden">
+  <div class="panel">
+    <h1>Тебя съели</h1>
+    <p>Лучший счёт за раунд:</p>
+    <div class="stat" id="finalScore">0</div>
+    <p style="margin-top:16px">Реванш?</p>
+    <button id="respawnBtn">Заново</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  // =====================================================================
+  // CONFIG
+  // =====================================================================
+  const WORLD = { w: 6000, h: 6000 };
+  const FOOD_COUNT = 800;
+  const VIRUS_COUNT = 18;
+  const BOT_COUNT = 14;
+  const START_MASS = 20;
+  const MAX_CELLS = 16;
+  const EJECT_MASS = 16;
+  const EJECT_SPEED = 28;
+  const SPLIT_SPEED = 24;
+  const MERGE_TIME = 12000; // ms before split cells can merge again
+  const VIRUS_MASS = 130;
+  const FOOD_MASS = 1;
+
+  const COLORS = [
+    "#ff6b6b","#feca57","#48dbfb","#1dd1a1","#5f27cd",
+    "#ff9ff3","#54a0ff","#00d2d3","#ffa502","#7bed9f",
+    "#a29bfe","#fd79a8","#fdcb6e","#74b9ff","#55efc4"
+  ];
+
+  const BOT_NAMES = [
+    "Bober","Slimey","Pixel","Dasha","Vova","NyamNyam",
+    "Chunk","Fluffy","Goblin","Buba","Ket","Volk",
+    "Pomidor","Хищник","Котлета","Жорик","Боб","Пельмень"
+  ];
+
+  // =====================================================================
+  // CANVAS
+  // =====================================================================
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  let W = 0, H = 0, DPR = window.devicePixelRatio || 1;
+
+  function resize() {
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width  = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width  = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // =====================================================================
+  // UTILS
+  // =====================================================================
+  const rand = (a,b) => a + Math.random()*(b-a);
+  const randi = (a,b) => Math.floor(rand(a,b));
+  const pick = arr => arr[randi(0, arr.length)];
+  const clamp = (v,a,b) => v<a?a:v>b?b:v;
+  const dist2 = (a,b) => (a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y);
+  const massToRadius = m => Math.sqrt(m) * 4 + 4;
+  const radiusToMass = r => ((r-4)/4)**2;
+  // Speed decreases as mass grows (classic agar feel)
+  const massToSpeed = m => Math.max(1.2, 7.5 / Math.pow(m, 0.22));
+
+  function darken(hex, amt=0.7) {
+    const c = hex.replace("#","");
+    const r = parseInt(c.substr(0,2),16) * amt | 0;
+    const g = parseInt(c.substr(2,2),16) * amt | 0;
+    const b = parseInt(c.substr(4,2),16) * amt | 0;
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // =====================================================================
+  // ENTITIES
+  // =====================================================================
+  let foods = [];
+  let viruses = [];
+  let ejected = [];
+  let players = []; // includes user + bots
+  let user = null;
+
+  function spawnFoods(n) {
+    for (let i=0;i<n;i++) {
+      foods.push({
+        x: rand(0, WORLD.w),
+        y: rand(0, WORLD.h),
+        r: 6,
+        m: FOOD_MASS,
+        color: pick(COLORS)
+      });
+    }
+  }
+  function spawnViruses(n) {
+    for (let i=0;i<n;i++) {
+      viruses.push({
+        x: rand(100, WORLD.w-100),
+        y: rand(100, WORLD.h-100),
+        m: VIRUS_MASS,
+        r: massToRadius(VIRUS_MASS),
+        color: "#3ce66c"
+      });
+    }
+  }
+
+  function makeCell(x,y,m,color) {
+    return {
+      x, y, m,
+      r: massToRadius(m),
+      color,
+      vx: 0, vy: 0,
+      mergeAt: 0
+    };
+  }
+
+  function makePlayer(name, isBot) {
+    const color = pick(COLORS);
+    const x = rand(200, WORLD.w-200);
+    const y = rand(200, WORLD.h-200);
+    return {
+      name, isBot, color, alive: true,
+      cells: [ makeCell(x, y, START_MASS, color) ],
+      target: { x, y },
+      // ai
+      ai: { think: 0, target: null }
+    };
+  }
+
+  function totalMass(p) {
+    let s = 0;
+    for (const c of p.cells) s += c.m;
+    return s;
+  }
+  function centroid(p) {
+    let x=0,y=0,m=0;
+    for (const c of p.cells) { x += c.x*c.m; y += c.y*c.m; m += c.m; }
+    return { x: x/m, y: y/m };
+  }
+
+  // =====================================================================
+  // INPUT
+  // =====================================================================
+  const mouse = { x: 0, y: 0 };
+  canvas.addEventListener("mousemove", e => {
+    mouse.x = e.clientX; mouse.y = e.clientY;
+  });
+  canvas.addEventListener("touchmove", e => {
+    if (e.touches[0]) { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }
+    e.preventDefault();
+  }, { passive: false });
+
+  window.addEventListener("keydown", e => {
+    if (!user || !user.alive) return;
+    if (e.code === "Space") { e.preventDefault(); splitPlayer(user); }
+    if (e.code === "KeyW")  { e.preventDefault(); ejectMass(user); }
+  });
+
+  // =====================================================================
+  // ACTIONS
+  // =====================================================================
+  function splitPlayer(p) {
+    if (p.cells.length >= MAX_CELLS) return;
+    const aim = aimWorldPoint(p);
+    const newCells = [];
+    for (const c of p.cells) {
+      if (newCells.length + p.cells.length >= MAX_CELLS) { newCells.push(null); continue; }
+      if (c.m < 36) { newCells.push(null); continue; }
+      const dx = aim.x - c.x, dy = aim.y - c.y;
+      const len = Math.hypot(dx,dy) || 1;
+      const half = c.m / 2;
+      c.m = half; c.r = massToRadius(half);
+      c.mergeAt = performance.now() + MERGE_TIME;
+      const n = makeCell(c.x, c.y, half, p.color);
+      n.vx = (dx/len) * SPLIT_SPEED;
+      n.vy = (dy/len) * SPLIT_SPEED;
+      n.mergeAt = performance.now() + MERGE_TIME;
+      newCells.push(n);
+    }
+    for (const n of newCells) if (n) p.cells.push(n);
+  }
+
+  function ejectMass(p) {
+    const aim = aimWorldPoint(p);
+    for (const c of p.cells) {
+      if (c.m < EJECT_MASS + 20) continue;
+      c.m -= EJECT_MASS; c.r = massToRadius(c.m);
+      const dx = aim.x - c.x, dy = aim.y - c.y;
+      const len = Math.hypot(dx,dy) || 1;
+      ejected.push({
+        x: c.x + (dx/len)*c.r,
+        y: c.y + (dy/len)*c.r,
+        vx: (dx/len)*EJECT_SPEED,
+        vy: (dy/len)*EJECT_SPEED,
+        m: EJECT_MASS,
+        r: massToRadius(EJECT_MASS),
+        color: p.color,
+        owner: p,
+        life: 1500
+      });
+    }
+  }
+
+  function aimWorldPoint(p) {
+    if (p === user) {
+      // mouse in world coords
+      const c = centroid(p);
+      const zoom = camera.zoom;
+      return {
+        x: c.x + (mouse.x - W/2) / zoom,
+        y: c.y + (mouse.y - H/2) / zoom
+      };
+    }
+    return p.ai.target || centroid(p);
+  }
+
+  // =====================================================================
+  // CAMERA
+  // =====================================================================
+  const camera = { x: WORLD.w/2, y: WORLD.h/2, zoom: 1, targetZoom: 1 };
+
+  function updateCamera() {
+    if (!user || !user.alive) return;
+    const c = centroid(user);
+    camera.x += (c.x - camera.x) * 0.15;
+    camera.y += (c.y - camera.y) * 0.15;
+    const m = totalMass(user);
+    camera.targetZoom = clamp(64 / Math.sqrt(m + 32), 0.35, 1.2);
+    camera.zoom += (camera.targetZoom - camera.zoom) * 0.08;
+  }
+
+  // =====================================================================
+  // AI
+  // =====================================================================
+  function aiUpdate(bot, dt) {
+    bot.ai.think -= dt;
+    if (bot.ai.think > 0 && bot.ai.target) return;
+    bot.ai.think = rand(300, 900);
+
+    const c = centroid(bot);
+    const myMass = totalMass(bot);
+
+    // Find nearest threat / prey / food
+    let bestPrey = null, bestPreyD = Infinity;
+    let nearestThreat = null, nearestThreatD = Infinity;
+
+    for (const p of players) {
+      if (p === bot || !p.alive) continue;
+      const pc = centroid(p);
+      const pm = totalMass(p);
+      const d = Math.hypot(pc.x - c.x, pc.y - c.y);
+      if (d > 1200) continue;
+      if (pm > myMass * 1.2) {
+        if (d < nearestThreatD) { nearestThreatD = d; nearestThreat = pc; }
+      } else if (myMass > pm * 1.25) {
+        if (d < bestPreyD) { bestPreyD = d; bestPrey = pc; }
+      }
+    }
+
+    // Threat takes priority
+    if (nearestThreat && nearestThreatD < 350) {
+      bot.ai.target = {
+        x: c.x - (nearestThreat.x - c.x),
+        y: c.y - (nearestThreat.y - c.y)
+      };
+      return;
+    }
+
+    if (bestPrey) {
+      bot.ai.target = bestPrey;
+      return;
+    }
+
+    // Find food cluster
+    let fx = 0, fy = 0, fn = 0;
+    for (const f of foods) {
+      const dx = f.x - c.x, dy = f.y - c.y;
+      if (dx*dx+dy*dy < 500*500) { fx += f.x; fy += f.y; fn++; }
+    }
+    if (fn > 0) {
+      bot.ai.target = { x: fx/fn, y: fy/fn };
+    } else {
+      bot.ai.target = { x: rand(200, WORLD.w-200), y: rand(200, WORLD.h-200) };
+    }
+  }
+
+  // =====================================================================
+  // PHYSICS / UPDATE
+  // =====================================================================
+  function updatePlayer(p, dt) {
+    const aim = aimWorldPoint(p);
+    for (const c of p.cells) {
+      const speed = massToSpeed(c.m);
+      const dx = aim.x - c.x, dy = aim.y - c.y;
+      const d = Math.hypot(dx,dy);
+      if (d > 1) {
+        const f = Math.min(1, d / 80);
+        c.vx += ((dx/d) * speed - c.vx) * 0.25 * f;
+        c.vy += ((dy/d) * speed - c.vy) * 0.25 * f;
+      } else {
+        c.vx *= 0.85; c.vy *= 0.85;
+      }
+      c.x += c.vx; c.y += c.vy;
+      c.vx *= 0.92; c.vy *= 0.92;
+      c.x = clamp(c.x, c.r, WORLD.w - c.r);
+      c.y = clamp(c.y, c.r, WORLD.h - c.r);
+    }
+    resolveOwnCells(p);
+
+    // Try to merge own cells
+    const now = performance.now();
+    for (let i=0;i<p.cells.length;i++) {
+      for (let j=i+1;j<p.cells.length;j++) {
+        const a = p.cells[i], b = p.cells[j];
+        if (a.mergeAt > now || b.mergeAt > now) continue;
+        const d = Math.hypot(a.x-b.x, a.y-b.y);
+        if (d < Math.max(a.r,b.r) * 0.85) {
+          a.m += b.m; a.r = massToRadius(a.m);
+          p.cells.splice(j,1); j--;
+        }
+      }
+    }
+  }
+
+  // Push own cells apart while not merging
+  function resolveOwnCells(p) {
+    const now = performance.now();
+    for (let i=0;i<p.cells.length;i++) {
+      for (let j=i+1;j<p.cells.length;j++) {
+        const a = p.cells[i], b = p.cells[j];
+        if (a.mergeAt <= now && b.mergeAt <= now) continue;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.hypot(dx,dy) || 0.01;
+        const min = a.r + b.r;
+        if (d < min) {
+          const push = (min - d) * 0.5;
+          const nx = dx/d, ny = dy/d;
+          a.x -= nx*push; a.y -= ny*push;
+          b.x += nx*push; b.y += ny*push;
+        }
+      }
+    }
+  }
+
+  function eatFood() {
+    for (const p of players) {
+      if (!p.alive) continue;
+      for (const c of p.cells) {
+        for (let i=foods.length-1; i>=0; i--) {
+          const f = foods[i];
+          const dx = f.x-c.x, dy = f.y-c.y;
+          if (dx*dx + dy*dy < c.r*c.r) {
+            c.m += f.m; c.r = massToRadius(c.m);
+            foods.splice(i,1);
+          }
+        }
+        // Eat ejected mass
+        for (let i=ejected.length-1; i>=0; i--) {
+          const e = ejected[i];
+          if (Math.hypot(e.vx,e.vy) > 6 && e.owner === p) continue;
+          const dx = e.x-c.x, dy = e.y-c.y;
+          if (dx*dx + dy*dy < c.r*c.r) {
+            c.m += e.m * 0.9; c.r = massToRadius(c.m);
+            ejected.splice(i,1);
+          }
+        }
+      }
+    }
+    // Top up food
+    while (foods.length < FOOD_COUNT) {
+      foods.push({
+        x: rand(0,WORLD.w), y: rand(0,WORLD.h),
+        r: 6, m: FOOD_MASS, color: pick(COLORS)
+      });
+    }
+  }
+
+  function updateEjected(dt) {
+    for (let i=ejected.length-1;i>=0;i--) {
+      const e = ejected[i];
+      e.x += e.vx; e.y += e.vy;
+      e.vx *= 0.94; e.vy *= 0.94;
+      e.life -= dt;
+      e.x = clamp(e.x, e.r, WORLD.w - e.r);
+      e.y = clamp(e.y, e.r, WORLD.h - e.r);
+
+      // Feed virus
+      for (const v of viruses) {
+        const dx = v.x-e.x, dy = v.y-e.y;
+        if (dx*dx+dy*dy < (v.r-2)*(v.r-2) && Math.hypot(e.vx,e.vy) > 4) {
+          v.m += e.m;
+          if (v.m > VIRUS_MASS * 1.6) {
+            // virus splits / shoots in same direction as ejected
+            const len = Math.hypot(e.vx,e.vy) || 1;
+            const nv = {
+              x: v.x, y: v.y,
+              m: VIRUS_MASS, r: massToRadius(VIRUS_MASS),
+              vx: (e.vx/len)*8, vy: (e.vy/len)*8,
+              color: "#3ce66c"
+            };
+            v.m = VIRUS_MASS; v.r = massToRadius(VIRUS_MASS);
+            viruses.push(nv);
+          } else {
+            v.r = massToRadius(v.m);
+          }
+          ejected.splice(i,1); break;
+        }
+      }
+    }
+  }
+
+  function updateViruses() {
+    for (const v of viruses) {
+      if (v.vx || v.vy) {
+        v.x += v.vx; v.y += v.vy;
+        v.vx *= 0.96; v.vy *= 0.96;
+        if (Math.abs(v.vx) < 0.05) v.vx = 0;
+        if (Math.abs(v.vy) < 0.05) v.vy = 0;
+        v.x = clamp(v.x, v.r, WORLD.w - v.r);
+        v.y = clamp(v.y, v.r, WORLD.h - v.r);
+      }
+    }
+    while (viruses.length < VIRUS_COUNT) {
+      viruses.push({
+        x: rand(100, WORLD.w-100),
+        y: rand(100, WORLD.h-100),
+        m: VIRUS_MASS, r: massToRadius(VIRUS_MASS),
+        color: "#3ce66c"
+      });
+    }
+  }
+
+  function virusInteractions() {
+    for (const p of players) {
+      if (!p.alive) continue;
+      for (let i=0;i<p.cells.length;i++) {
+        const c = p.cells[i];
+        for (let v=0; v<viruses.length; v++) {
+          const vir = viruses[v];
+          const dx = c.x-vir.x, dy = c.y-vir.y;
+          const d = Math.hypot(dx,dy);
+          if (d < c.r - vir.r*0.4 && c.m > vir.m * 1.15) {
+            // pop the player
+            viruses.splice(v,1); v--;
+            popCell(p, i);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  function popCell(p, idx) {
+    const c = p.cells[idx];
+    const pieces = Math.min(MAX_CELLS - p.cells.length + 1, 6);
+    if (pieces <= 1) return;
+    const each = c.m / pieces;
+    p.cells.splice(idx,1);
+    for (let i=0;i<pieces;i++) {
+      const ang = (i / pieces) * Math.PI * 2 + Math.random()*0.4;
+      const n = makeCell(c.x, c.y, each, p.color);
+      n.vx = Math.cos(ang) * 14;
+      n.vy = Math.sin(ang) * 14;
+      n.mergeAt = performance.now() + MERGE_TIME;
+      p.cells.push(n);
+    }
+  }
+
+  function eatPlayers() {
+    for (const a of players) {
+      if (!a.alive) continue;
+      for (const ac of a.cells) {
+        for (const b of players) {
+          if (b === a || !b.alive) continue;
+          for (let j=0;j<b.cells.length;j++) {
+            const bc = b.cells[j];
+            const d = Math.hypot(ac.x-bc.x, ac.y-bc.y);
+            if (ac.m > bc.m * 1.2 && d < ac.r - bc.r*0.5) {
+              ac.m += bc.m; ac.r = massToRadius(ac.m);
+              b.cells.splice(j,1); j--;
+              if (b.cells.length === 0) {
+                b.alive = false;
+                if (b === user) handleDeath();
+                else respawnBot(b);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function respawnBot(b) {
+    setTimeout(() => {
+      if (!b) return;
+      const c = makeCell(rand(200,WORLD.w-200), rand(200,WORLD.h-200), START_MASS, b.color);
+      b.cells = [c]; b.alive = true; b.ai.target = null;
+    }, 1500);
+  }
+
+  // =====================================================================
+  // RENDER
+  // =====================================================================
+  function worldToScreen(x,y) {
+    return { x: (x-camera.x) * camera.zoom + W/2, y: (y-camera.y) * camera.zoom + H/2 };
+  }
+
+  function drawGrid() {
+    const step = 50;
+    const z = camera.zoom;
+    ctx.strokeStyle = "rgba(255,255,255,0.05)";
+    ctx.lineWidth = 1;
+    const left = camera.x - (W/2)/z;
+    const right = camera.x + (W/2)/z;
+    const top = camera.y - (H/2)/z;
+    const bot = camera.y + (H/2)/z;
+    const x0 = Math.floor(left/step)*step;
+    const y0 = Math.floor(top/step)*step;
+    ctx.beginPath();
+    for (let x=x0; x<right; x+=step) {
+      const s = worldToScreen(x, top);
+      const e = worldToScreen(x, bot);
+      ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y);
+    }
+    for (let y=y0; y<bot; y+=step) {
+      const s = worldToScreen(left, y);
+      const e = worldToScreen(right, y);
+      ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y);
+    }
+    ctx.stroke();
+
+    // World border
+    ctx.strokeStyle = "rgba(255,255,255,0.2)";
+    ctx.lineWidth = 2;
+    const a = worldToScreen(0,0), b = worldToScreen(WORLD.w, WORLD.h);
+    ctx.strokeRect(a.x, a.y, b.x-a.x, b.y-a.y);
+  }
+
+  function drawCircle(cx,cy,r,fill,stroke,strokeW=4) {
+    ctx.beginPath();
+    ctx.arc(cx,cy,r,0,Math.PI*2);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) {
+      ctx.lineWidth = strokeW;
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+    }
+  }
+
+  function drawFood() {
+    const z = camera.zoom;
+    for (const f of foods) {
+      const s = worldToScreen(f.x, f.y);
+      if (s.x < -10 || s.x > W+10 || s.y < -10 || s.y > H+10) continue;
+      drawCircle(s.x, s.y, f.r * z, f.color, null);
+    }
+  }
+
+  function drawEjected() {
+    const z = camera.zoom;
+    for (const e of ejected) {
+      const s = worldToScreen(e.x, e.y);
+      drawCircle(s.x, s.y, e.r * z, e.color, darken(e.color), 3);
+    }
+  }
+
+  function drawViruses() {
+    const z = camera.zoom;
+    for (const v of viruses) {
+      const s = worldToScreen(v.x, v.y);
+      const r = v.r * z;
+      // Spiky outline
+      ctx.beginPath();
+      const spikes = 22;
+      for (let i=0;i<spikes*2;i++) {
+        const ang = (i / (spikes*2)) * Math.PI * 2;
+        const rr = i%2===0 ? r : r*0.86;
+        const x = s.x + Math.cos(ang)*rr;
+        const y = s.y + Math.sin(ang)*rr;
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = v.color;
+      ctx.fill();
+      ctx.strokeStyle = "#1f9c45";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
+  }
+
+  function drawPlayers() {
+    const z = camera.zoom;
+    // Draw cells sorted by mass so big eats render above small (just looks good)
+    const all = [];
+    for (const p of players) {
+      if (!p.alive) continue;
+      for (const c of p.cells) all.push({ p, c });
+    }
+    all.sort((a,b) => a.c.m - b.c.m);
+    for (const { p, c } of all) {
+      const s = worldToScreen(c.x, c.y);
+      const r = c.r * z;
+      if (s.x < -r-50 || s.x > W+r+50 || s.y < -r-50 || s.y > H+r+50) continue;
+      drawCircle(s.x, s.y, r, p.color, darken(p.color, 0.65), Math.max(2, r*0.06));
+
+      // Name + mass
+      if (r > 18) {
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.lineWidth = 3;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const fontSize = clamp(r*0.32, 12, 28);
+        ctx.font = `700 ${fontSize}px -apple-system, "Segoe UI", Roboto, sans-serif`;
+        ctx.strokeText(p.name, s.x, s.y - fontSize*0.5);
+        ctx.fillText(p.name, s.x, s.y - fontSize*0.5);
+        const mf = Math.floor(c.m);
+        const fs2 = clamp(r*0.22, 10, 20);
+        ctx.font = `600 ${fs2}px -apple-system, "Segoe UI", Roboto, sans-serif`;
+        ctx.strokeText(mf, s.x, s.y + fontSize*0.55);
+        ctx.fillText(mf, s.x, s.y + fontSize*0.55);
+      }
+    }
+  }
+
+  // =====================================================================
+  // HUD
+  // =====================================================================
+  const elMass  = document.getElementById("mass");
+  const elScore = document.getElementById("score");
+  const elLb    = document.getElementById("lbList");
+  let bestScore = 0;
+
+  function updateHUD() {
+    if (!user) return;
+    const m = user.alive ? Math.floor(totalMass(user)) : 0;
+    elMass.textContent = m;
+    if (m > bestScore) bestScore = m;
+    elScore.textContent = bestScore;
+
+    const sorted = players
+      .filter(p => p.alive)
+      .map(p => ({ name: p.name, m: Math.floor(totalMass(p)), me: p === user }))
+      .sort((a,b) => b.m - a.m)
+      .slice(0, 10);
+    elLb.innerHTML = sorted.map(s =>
+      `<li class="${s.me ? "me" : ""}">${escapeHtml(s.name)} — ${s.m}</li>`
+    ).join("");
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+    }[c]));
+  }
+
+  // =====================================================================
+  // GAME LOOP
+  // =====================================================================
+  let lastTime = performance.now();
+  function loop(now) {
+    const dt = Math.min(48, now - lastTime);
+    lastTime = now;
+
+    // Update
+    for (const p of players) {
+      if (!p.alive) continue;
+      if (p.isBot) aiUpdate(p, dt);
+      updatePlayer(p, dt);
+    }
+    updateEjected(dt);
+    updateViruses();
+    eatFood();
+    eatPlayers();
+    virusInteractions();
+    updateCamera();
+
+    // Render
+    ctx.fillStyle = "#0e1116";
+    ctx.fillRect(0,0,W,H);
+    drawGrid();
+    drawFood();
+    drawEjected();
+    drawPlayers();
+    drawViruses();
+
+    updateHUD();
+
+    requestAnimationFrame(loop);
+  }
+
+  // =====================================================================
+  // GAME FLOW
+  // =====================================================================
+  function startWorld() {
+    foods = []; viruses = []; ejected = []; players = [];
+    spawnFoods(FOOD_COUNT);
+    spawnViruses(VIRUS_COUNT);
+    for (let i=0;i<BOT_COUNT;i++) {
+      players.push(makePlayer(pick(BOT_NAMES) + (Math.random()<0.3 ? randi(1,99) : ""), true));
+    }
+  }
+
+  function spawnUser(name) {
+    user = makePlayer(name || "Игрок", false);
+    user.color = "#7ee0ff";
+    for (const c of user.cells) c.color = user.color;
+    players.unshift(user);
+    bestScore = 0;
+    camera.x = user.cells[0].x;
+    camera.y = user.cells[0].y;
+  }
+
+  function handleDeath() {
+    document.getElementById("finalScore").textContent = bestScore;
+    document.getElementById("deathPanel").classList.remove("hidden");
+  }
+
+  // Buttons
+  document.getElementById("playBtn").addEventListener("click", () => {
+    const name = document.getElementById("nameInput").value.trim() || "Игрок";
+    document.getElementById("startPanel").classList.add("hidden");
+    startWorld();
+    spawnUser(name);
+  });
+  document.getElementById("nameInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("playBtn").click();
+  });
+  document.getElementById("respawnBtn").addEventListener("click", () => {
+    document.getElementById("deathPanel").classList.add("hidden");
+    // Respawn user without resetting world
+    const name = user ? user.name : "Игрок";
+    // Remove old user instance
+    players = players.filter(p => p !== user);
+    spawnUser(name);
+  });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

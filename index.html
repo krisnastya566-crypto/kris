@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shrek: Save Fiona</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: #0b1d0b;
+    color: #e8ffd1;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  body {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  h1 {
+    font-size: 26px;
+    color: #b6ff5b;
+    text-shadow: 2px 2px 0 #000;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+  #wrap {
+    position: relative;
+    width: min(960px, 96vw);
+    aspect-ratio: 16 / 9;
+    border: 4px solid #4a7a1a;
+    border-radius: 12px;
+    box-shadow: 0 0 30px rgba(120, 220, 60, 0.35);
+    overflow: hidden;
+    background: #5a8a2a;
+  }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+  #hud {
+    position: absolute; top: 10px; left: 12px; right: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 16px; font-weight: bold;
+    text-shadow: 2px 2px 0 #000; pointer-events: none;
+  }
+  #hpbar {
+    width: 200px; height: 18px;
+    border: 2px solid #000; background: #3a1a1a;
+    position: relative; overflow: hidden; border-radius: 4px;
+  }
+  #hpfill {
+    height: 100%; background: linear-gradient(to right, #ff4040, #ffa040);
+    transition: width 0.2s;
+  }
+  #hudLeft, #hudRight { display: flex; align-items: center; gap: 10px; }
+  #overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center; padding: 20px;
+    cursor: pointer;
+    z-index: 10;
+  }
+  #overlay h2 { color: #b6ff5b; font-size: 32px; text-shadow: 3px 3px 0 #000; margin-bottom: 12px; }
+  #overlay p { font-size: 15px; line-height: 1.6; margin-bottom: 18px; max-width: 560px; }
+  button {
+    background: #7bbf2a; color: #1a2e0a;
+    border: 3px solid #2c4a0e; border-radius: 10px;
+    padding: 14px 28px; font-size: 20px; font-weight: bold;
+    cursor: pointer; box-shadow: 0 4px 0 #2c4a0e;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  button:hover { background: #94d83a; }
+  button:active { transform: translateY(2px); box-shadow: 0 2px 0 #2c4a0e; }
+  .hidden { display: none !important; }
+  .tag { color: #ffe066; }
+  .key { background: #1a2e0a; padding: 2px 8px; border-radius: 4px; color: #b6ff5b; }
+  footer { margin-top: 8px; font-size: 12px; color: #8fbf5a; }
+
+  /* Mobile touch controls */
+  #touch {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: none;
+  }
+  #touch.show { display: block; }
+  .tbtn {
+    position: absolute;
+    pointer-events: auto;
+    background: rgba(40, 60, 20, 0.55);
+    border: 3px solid rgba(182, 255, 91, 0.6);
+    color: #e8ffd1;
+    border-radius: 50%;
+    width: 70px; height: 70px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px; font-weight: bold;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.4);
+  }
+  .tbtn:active, .tbtn.held {
+    background: rgba(123, 191, 42, 0.8);
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 rgba(0,0,0,0.4);
+  }
+  #tLeft   { left: 14px;  bottom: 14px; }
+  #tRight  { left: 96px;  bottom: 14px; }
+  #tDuck   { left: 14px;  bottom: 96px; width: 60px; height: 60px; font-size: 22px; }
+  #tJump   { right: 96px; bottom: 14px; background: rgba(60, 100, 30, 0.6); }
+  #tAttack { right: 14px; bottom: 14px; width: 80px; height: 80px;
+             background: rgba(140, 50, 30, 0.65); border-color: rgba(255, 120, 80, 0.7); }
+
+  @media (hover: none) and (pointer: coarse) {
+    #touch { display: block; }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    footer { display: none; }
+    #hud { font-size: 13px; }
+    #hpbar { width: 120px; height: 14px; }
+    #hudRight { gap: 6px; }
+  }
+
+  #stageLabel {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 42px; color: #b6ff5b; text-shadow: 3px 3px 0 #000;
+    opacity: 0; transition: opacity 0.5s; pointer-events: none;
+    font-weight: bold; letter-spacing: 2px;
+  }
+  #stageLabel.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <h1>SHREK: SAVE FIONA</h1>
+  <div id="wrap">
+    <canvas id="game" width="960" height="540"></canvas>
+    <div id="hud">
+      <div id="hudLeft">
+        <span>HP</span>
+        <div id="hpbar"><div id="hpfill" style="width:100%"></div></div>
+      </div>
+      <div id="hudRight">
+        <span>Stage: <span id="stageNum">1</span>/3</span>
+        <span>🧅 <span id="onions">0</span></span>
+        <span>Score: <span id="score">0</span></span>
+      </div>
+    </div>
+    <div id="stageLabel"></div>
+    <div id="touch">
+      <div id="tLeft" class="tbtn">◄</div>
+      <div id="tRight" class="tbtn">►</div>
+      <div id="tDuck" class="tbtn">▼</div>
+      <div id="tJump" class="tbtn">▲</div>
+      <div id="tAttack" class="tbtn">👊</div>
+    </div>
+    <div id="overlay">
+      <h2>Get out of my swamp!</h2>
+      <p>
+        Лорд Фаркуад захватил болото и похитил Фиону! Пробейся через 3 уровня и спаси её.<br><br>
+        <b>На компьютере:</b><br>
+        <span class="key">A/D</span> или <span class="key">←/→</span> — бежать &nbsp;
+        <span class="key">Space</span> или <span class="key">W</span> — прыжок (двойной!)<br>
+        <span class="key">J</span> или <span class="key">F</span> — удар кулаком 👊 &nbsp;
+        <span class="key">S</span> или <span class="key">↓</span> — пригнуться<br><br>
+        <b>На телефоне:</b> кнопки управления появятся снизу 📱<br><br>
+        Бей крыс и стражников, собирай 🧅 (восстанавливают HP), победи босса!
+      </p>
+      <button id="startBtn">Начать приключение</button>
+    </div>
+  </div>
+  <footer>Канвас. Только клавиатура. Удачи, огр 💪</footer>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const GROUND_Y = H - 90;
+
+  const hpfill = document.getElementById('hpfill');
+  const onionsEl = document.getElementById('onions');
+  const scoreEl = document.getElementById('score');
+  const stageNumEl = document.getElementById('stageNum');
+  const stageLabel = document.getElementById('stageLabel');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = overlay.querySelector('h2');
+  const overlayText = overlay.querySelector('p');
+  const startBtn = document.getElementById('startBtn');
+
+  // Input
+  const keys = {};
+  window.addEventListener('keydown', e => {
+    if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD','KeyJ','KeyF'].includes(e.code)) e.preventDefault();
+    if (!keys[e.code]) keys[e.code + '_pressed'] = true;
+    keys[e.code] = true;
+  });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+  function consumePressed(code) {
+    if (keys[code + '_pressed']) { keys[code + '_pressed'] = false; return true; }
+    return false;
+  }
+
+  // Touch controls — wire mobile buttons to the same `keys` map
+  function bindTouchButton(id, code) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const press = (e) => {
+      e.preventDefault();
+      if (!keys[code]) keys[code + '_pressed'] = true;
+      keys[code] = true;
+      el.classList.add('held');
+    };
+    const release = (e) => {
+      e.preventDefault();
+      keys[code] = false;
+      el.classList.remove('held');
+    };
+    el.addEventListener('touchstart', press, { passive: false });
+    el.addEventListener('touchend', release, { passive: false });
+    el.addEventListener('touchcancel', release, { passive: false });
+    // also support mouse for desktop testing
+    el.addEventListener('mousedown', press);
+    el.addEventListener('mouseup', release);
+    el.addEventListener('mouseleave', release);
+  }
+  bindTouchButton('tLeft', 'ArrowLeft');
+  bindTouchButton('tRight', 'ArrowRight');
+  bindTouchButton('tJump', 'Space');
+  bindTouchButton('tDuck', 'ArrowDown');
+  bindTouchButton('tAttack', 'KeyJ');
+
+  // Detect touch device — show mobile pad
+  const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  if (isTouch) document.getElementById('touch').classList.add('show');
+
+  // Game state
+  let state = 'menu';
+  let score = 0, onions = 0;
+  let stage = 1; // 1..3
+  let stageProgress = 0; // px traveled in stage
+  const STAGE_LENGTH = 3000;
+
+  const STAGES = [
+    { name: 'BOLOTO', sky1: '#7fb84a', sky2: '#c5e58a', ground1: '#3a5a18', ground2: '#1e3408' },
+    { name: 'TEMNYI LES', sky1: '#3a4a2a', sky2: '#7a8a4a', ground1: '#2a3a18', ground2: '#0e1a05' },
+    { name: 'DULOC',     sky1: '#5a6a8a', sky2: '#a8b8d8', ground1: '#6a6a6a', ground2: '#3a3a3a' },
+  ];
+
+  const player = {
+    x: 140, y: GROUND_Y, w: 60, h: 90,
+    vx: 0, vy: 0, dir: 1,
+    onGround: true, jumps: 0, ducking: false,
+    hp: 100, maxHp: 100,
+    attackTimer: 0, hurtTimer: 0,
+    blink: 0,
+  };
+
+  let enemies = [], pickups = [], particles = [], projectiles = [];
+  let cam = { x: 0 };
+  let trees = [], clouds = [], buildings = [];
+  let boss = null;
+  let fiona = null;
+  let time = 0;
+  let spawnTimer = 60;
+
+  function showStageLabel(text) {
+    stageLabel.textContent = text;
+    stageLabel.classList.add('show');
+    setTimeout(() => stageLabel.classList.remove('show'), 1800);
+  }
+
+  function reset() {
+    score = 0; onions = 0; stage = 1; stageProgress = 0;
+    player.x = 140; player.y = GROUND_Y; player.vx = 0; player.vy = 0;
+    player.dir = 1; player.onGround = true; player.jumps = 0; player.ducking = false;
+    player.hp = player.maxHp; player.attackTimer = 0; player.hurtTimer = 0;
+    enemies.length = 0; pickups.length = 0; particles.length = 0; projectiles.length = 0;
+    cam.x = 0; boss = null; fiona = null;
+    spawnTimer = 60;
+    setupStageBackground();
+    updateHud();
+    showStageLabel('Stage 1: ' + STAGES[0].name);
+  }
+
+  function setupStageBackground() {
+    clouds = Array.from({length: 6}, () => ({
+      x: Math.random() * W * 2,
+      y: 30 + Math.random() * 160,
+      s: 0.6 + Math.random() * 0.8,
+      v: 0.2 + Math.random() * 0.3,
+    }));
+    trees = Array.from({length: 10}, (_, i) => ({
+      x: i * 220 + Math.random() * 100,
+      scale: 0.7 + Math.random() * 0.6,
+      kind: Math.random() < 0.5 ? 0 : 1,
+    }));
+    buildings = [];
+    if (stage === 3) {
+      buildings = Array.from({length: 8}, (_, i) => ({
+        x: i * 180 + Math.random() * 60,
+        h: 100 + Math.random() * 100,
+        w: 80 + Math.random() * 40,
+      }));
+    }
+  }
+
+  function nextStage() {
+    if (stage < 3) {
+      stage++;
+      stageProgress = 0;
+      enemies.length = 0; pickups.length = 0; projectiles.length = 0;
+      player.x = 140; cam.x = 0;
+      setupStageBackground();
+      stageNumEl.textContent = stage;
+      showStageLabel('Stage ' + stage + ': ' + STAGES[stage-1].name);
+    } else {
+      // Spawn boss
+      if (!boss) {
+        boss = makeBoss();
+        showStageLabel('LORD FARQUAAD!');
+      }
+    }
+  }
+
+  function makeBoss() {
+    return {
+      x: cam.x + W - 120, y: GROUND_Y, w: 80, h: 100,
+      hp: 80, maxHp: 80,
+      vx: 0, dir: -1,
+      cooldown: 60,
+      hurtTimer: 0,
+      phase: 0,
+    };
+  }
+
+  function spawnEnemyAtRight(type) {
+    const x = cam.x + W + 30;
+    if (type === 'rat') {
+      enemies.push({
+        type: 'rat', x, y: GROUND_Y, w: 40, h: 26,
+        hp: 1, vx: -2.5, dir: -1, hurtTimer: 0,
+      });
+    } else if (type === 'guard') {
+      enemies.push({
+        type: 'guard', x, y: GROUND_Y, w: 50, h: 80,
+        hp: 2, vx: -1.5, dir: -1, hurtTimer: 0, atkCd: 60,
+      });
+    } else if (type === 'archer') {
+      enemies.push({
+        type: 'archer', x, y: GROUND_Y, w: 50, h: 80,
+        hp: 1, vx: 0, dir: -1, hurtTimer: 0, atkCd: 90,
+      });
+    }
+  }
+
+  function spawnOnion() {
+    const x = cam.x + W + 30;
+    pickups.push({ type: 'onion', x, y: GROUND_Y - 40 - Math.random()*60, w: 26, h: 30, t: 0 });
+  }
+
+  function maybeSpawn() {
+    if (boss) return;
+    spawnTimer--;
+    if (spawnTimer > 0) return;
+    spawnTimer = 70 + Math.floor(Math.random() * 60) - stage * 8;
+
+    const r = Math.random();
+    if (stage === 1) {
+      if (r < 0.55) spawnEnemyAtRight('rat');
+      else if (r < 0.75) spawnEnemyAtRight('guard');
+      else spawnOnion();
+    } else if (stage === 2) {
+      if (r < 0.30) spawnEnemyAtRight('rat');
+      else if (r < 0.65) spawnEnemyAtRight('guard');
+      else if (r < 0.85) spawnEnemyAtRight('archer');
+      else spawnOnion();
+    } else {
+      if (r < 0.30) spawnEnemyAtRight('guard');
+      else if (r < 0.70) spawnEnemyAtRight('archer');
+      else spawnOnion();
+    }
+  }
+
+  function rectsOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y - a.h < b.y && a.y > b.y - b.h;
+  }
+  // Note: our entities use y = bottom (feet), y-h = top
+  function box(e) { return { x: e.x - e.w/2, y: e.y, w: e.w, h: e.h }; }
+
+  function aabb(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x &&
+           a.y - a.h < b.y && a.y > b.y - b.h;
+  }
+
+  function playerHit(dmg) {
+    if (player.hurtTimer > 0) return;
+    player.hp -= dmg;
+    player.hurtTimer = 50;
+    if (player.hp <= 0) {
+      player.hp = 0;
+      gameOver(false);
+    }
+    updateHud();
+    burst(player.x, player.y - 40, 8, '#ff6060');
+  }
+
+  function enemyHit(e, dmg) {
+    e.hp -= dmg;
+    e.hurtTimer = 15;
+    e.vx = (player.dir) * 6;
+    burst(e.x, e.y - e.h/2, 6, '#ffe066');
+    if (e.hp <= 0) {
+      score += (e.type === 'guard' ? 100 : e.type === 'archer' ? 80 : 30);
+      burst(e.x, e.y - e.h/2, 14, '#a02020');
+      return true;
+    }
+    return false;
+  }
+
+  function bossHit(dmg) {
+    boss.hp -= dmg;
+    boss.hurtTimer = 12;
+    burst(boss.x, boss.y - 60, 8, '#ffe066');
+    if (boss.hp <= 0) {
+      score += 1000;
+      burst(boss.x, boss.y - 60, 30, '#ff8040');
+      boss = null;
+      // Spawn Fiona to rescue
+      fiona = { x: cam.x + W - 100, y: GROUND_Y, w: 50, h: 90 };
+      showStageLabel('FREE FIONA!');
+    }
+  }
+
+  function burst(x, y, n, color) {
+    for (let i = 0; i < n; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 5,
+        vy: (Math.random() - 1) * 4,
+        life: 24 + Math.random() * 12,
+        color, size: 2 + Math.random() * 3,
+      });
+    }
+  }
+
+  function updateHud() {
+    hpfill.style.width = (player.hp / player.maxHp * 100) + '%';
+    onionsEl.textContent = onions;
+    scoreEl.textContent = score;
+    stageNumEl.textContent = stage;
+  }
+
+  // ---------- Update ----------
+  function update() {
+    time++;
+
+    // Movement
+    let move = 0;
+    if (keys.KeyA || keys.ArrowLeft) move -= 1;
+    if (keys.KeyD || keys.ArrowRight) move += 1;
+    if (move !== 0) player.dir = move;
+    player.vx = move * (player.ducking ? 2 : 5);
+
+    player.ducking = (keys.KeyS || keys.ArrowDown) && player.onGround;
+
+    // Jump
+    if (consumePressed('Space') || consumePressed('KeyW') || consumePressed('ArrowUp')) {
+      if (player.jumps < 2) {
+        player.vy = player.jumps === 0 ? -16 : -13;
+        player.onGround = false;
+        player.jumps++;
+        burst(player.x, player.y, 5, '#a8d850');
+      }
+    }
+
+    // Attack
+    if ((consumePressed('KeyJ') || consumePressed('KeyF')) && player.attackTimer <= 0) {
+      player.attackTimer = 18;
+    }
+    if (player.attackTimer > 0) player.attackTimer--;
+
+    // Gravity
+    player.vy += 0.85;
+    player.y += player.vy;
+    player.x += player.vx;
+    if (player.y >= GROUND_Y) {
+      player.y = GROUND_Y; player.vy = 0;
+      player.onGround = true; player.jumps = 0;
+    }
+    if (player.x < cam.x + 30) player.x = cam.x + 30;
+
+    if (player.hurtTimer > 0) player.hurtTimer--;
+    if (Math.random() < 0.005) player.blink = 8;
+    if (player.blink > 0) player.blink--;
+
+    // Camera follows
+    const targetCam = player.x - W * 0.35;
+    cam.x += (targetCam - cam.x) * 0.1;
+    if (cam.x < 0) cam.x = 0;
+
+    // Stage progress (only if no boss)
+    if (!boss && !fiona) {
+      stageProgress = Math.max(stageProgress, player.x);
+      if (stageProgress > STAGE_LENGTH) nextStage();
+    }
+
+    // Background
+    for (const c of clouds) {
+      c.x -= c.v;
+      if (c.x < cam.x - 200) c.x = cam.x + W + 100;
+    }
+
+    // Spawning
+    maybeSpawn();
+
+    // Enemies
+    const atkBox = player.attackTimer > 8 ? {
+      x: player.x + (player.dir > 0 ? 0 : -50),
+      y: player.y - 30, w: 50, h: 50,
+    } : null;
+
+    for (const e of enemies) {
+      e.x += e.vx;
+      // Friction for knockback
+      if (e.hurtTimer > 0) {
+        e.hurtTimer--;
+        e.vx *= 0.85;
+        if (e.hurtTimer === 0) {
+          e.vx = e.type === 'rat' ? -2.5 : e.type === 'guard' ? -1.5 : 0;
+        }
+      } else {
+        // AI
+        if (e.type === 'guard') {
+          const dist = e.x - player.x;
+          if (Math.abs(dist) < 60) {
+            e.vx = 0;
+            e.atkCd--;
+            if (e.atkCd <= 0) {
+              // Sword swing — damages player if close
+              if (Math.abs(dist) < 60 && Math.abs(player.y - e.y) < 30) {
+                playerHit(12);
+              }
+              e.atkCd = 70;
+            }
+          } else {
+            e.vx = dist > 0 ? -1.5 : 1.5;
+            e.dir = dist > 0 ? -1 : 1;
+          }
+        } else if (e.type === 'archer') {
+          e.atkCd--;
+          if (e.atkCd <= 0) {
+            // Shoot arrow
+            projectiles.push({
+              type: 'arrow', x: e.x, y: e.y - 50,
+              vx: -7, w: 30, h: 6, life: 200,
+            });
+            e.atkCd = 110;
+          }
+        }
+      }
+
+      // Player attack hits
+      if (atkBox && aabb(atkBox, box(e))) {
+        if (enemyHit(e, 1)) continue;
+      }
+
+      // Enemy touches player
+      if (e.hp > 0 && e.hurtTimer === 0 && aabb(box(e), box(player)) && player.hurtTimer === 0) {
+        if (e.type === 'rat') { playerHit(8); enemyHit(e, 1); }
+        else if (e.type === 'guard') playerHit(10);
+        else if (e.type === 'archer') playerHit(6);
+      }
+    }
+    enemies = enemies.filter(e => e.hp > 0 && e.x > cam.x - 200);
+
+    // Projectiles
+    for (const p of projectiles) {
+      p.x += p.vx;
+      p.life--;
+      if (aabb(p, box(player)) && player.hurtTimer === 0) {
+        playerHit(10); p.life = 0;
+      }
+    }
+    projectiles = projectiles.filter(p => p.life > 0 && p.x > cam.x - 100);
+
+    // Pickups
+    for (const p of pickups) p.t = (p.t || 0) + 0.15;
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      const p = pickups[i];
+      const pBox = { x: p.x - p.w/2, y: p.y, w: p.w, h: p.h };
+      if (aabb(pBox, box(player))) {
+        pickups.splice(i, 1);
+        onions++;
+        player.hp = Math.min(player.maxHp, player.hp + 20);
+        score += 50;
+        burst(p.x, p.y - 15, 12, '#e6c46b');
+        updateHud();
+      }
+    }
+    pickups = pickups.filter(p => p.x > cam.x - 100);
+
+    // Boss
+    if (boss) {
+      boss.hurtTimer = Math.max(0, boss.hurtTimer - 1);
+      const dist = boss.x - player.x;
+      boss.dir = dist > 0 ? -1 : 1;
+      // Move
+      if (Math.abs(dist) > 120) {
+        boss.vx = dist > 0 ? -2 : 2;
+      } else {
+        boss.vx = 0;
+        boss.cooldown--;
+        if (boss.cooldown <= 0) {
+          // Charge
+          boss.vx = dist > 0 ? -7 : 7;
+          boss.cooldown = 90;
+          setTimeout(() => { if (boss) boss.vx = 0; }, 400);
+        }
+      }
+      boss.x += boss.vx;
+
+      // Damage to player
+      if (aabb(box(boss), box(player)) && player.hurtTimer === 0) {
+        playerHit(15);
+        // Knockback player
+        player.vx = boss.dir > 0 ? -8 : 8;
+        player.vy = -8;
+      }
+
+      // Player attack hits boss
+      if (atkBox && aabb(atkBox, box(boss)) && boss.hurtTimer === 0) {
+        bossHit(1);
+      }
+    }
+
+    // Fiona rescue
+    if (fiona) {
+      if (aabb(box(fiona), box(player))) {
+        gameOver(true);
+        return;
+      }
+    }
+
+    // Particles
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.3; p.life--;
+    }
+    particles = particles.filter(p => p.life > 0);
+
+    score += 1; // small passive score for progress
+    if (time % 30 === 0) updateHud();
+  }
+
+  // ---------- Draw ----------
+  function drawSky() {
+    const s = STAGES[stage - 1];
+    const g = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+    g.addColorStop(0, s.sky1);
+    g.addColorStop(1, s.sky2);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, GROUND_Y);
+
+    if (stage !== 2) {
+      ctx.fillStyle = stage === 3 ? '#ddddee' : '#fff5b8';
+      ctx.beginPath(); ctx.arc(W - 100, 90, 38, 0, Math.PI*2); ctx.fill();
+    } else {
+      ctx.fillStyle = '#dde8a8';
+      ctx.beginPath(); ctx.arc(W - 100, 80, 28, 0, Math.PI*2); ctx.fill();
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (const c of clouds) {
+      const sx = c.x - cam.x * 0.2;
+      const r = 18 * c.s;
+      ctx.beginPath();
+      ctx.arc(sx, c.y, r, 0, Math.PI*2);
+      ctx.arc(sx + r, c.y + 4, r*0.9, 0, Math.PI*2);
+      ctx.arc(sx - r, c.y + 4, r*0.9, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawBackgroundProps() {
+    if (stage === 3) {
+      // Duloc buildings
+      for (const b of buildings) {
+        const sx = b.x - cam.x * 0.5;
+        if (sx < -100 || sx > W + 100) continue;
+        ctx.fillStyle = '#b0a890';
+        ctx.fillRect(sx, GROUND_Y - b.h, b.w, b.h);
+        ctx.fillStyle = '#8a3030';
+        ctx.beginPath();
+        ctx.moveTo(sx - 5, GROUND_Y - b.h);
+        ctx.lineTo(sx + b.w/2, GROUND_Y - b.h - 30);
+        ctx.lineTo(sx + b.w + 5, GROUND_Y - b.h);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#3a3a5a';
+        for (let y = GROUND_Y - b.h + 20; y < GROUND_Y - 20; y += 30) {
+          for (let x = sx + 10; x < sx + b.w - 10; x += 25) {
+            ctx.fillRect(x, y, 12, 16);
+          }
+        }
+      }
+    } else {
+      // Trees
+      for (const t of trees) {
+        const baseX = t.x - cam.x * 0.6;
+        if (baseX < -100 || baseX > W + 100) continue;
+        const baseY = GROUND_Y;
+        const sc = t.scale;
+        ctx.fillStyle = stage === 2 ? '#3a2a0a' : '#5a3a1a';
+        ctx.fillRect(baseX - 6*sc, baseY - 60*sc, 12*sc, 60*sc);
+        ctx.fillStyle = stage === 2 ? '#1a3008' : '#2a5a18';
+        ctx.beginPath();
+        ctx.arc(baseX, baseY - 70*sc, 35*sc, 0, Math.PI*2);
+        ctx.arc(baseX - 22*sc, baseY - 60*sc, 28*sc, 0, Math.PI*2);
+        ctx.arc(baseX + 22*sc, baseY - 60*sc, 28*sc, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawGround() {
+    const s = STAGES[stage - 1];
+    const g = ctx.createLinearGradient(0, GROUND_Y, 0, H);
+    g.addColorStop(0, s.ground1);
+    g.addColorStop(1, s.ground2);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+
+    ctx.fillStyle = stage === 3 ? '#4a4a4a' : '#1a3008';
+    const off = -((cam.x) % 60);
+    for (let x = off; x < W; x += 60) {
+      ctx.fillRect(x, GROUND_Y + 4, 30, 4);
+      ctx.fillRect(x + 15, GROUND_Y + 22, 30, 4);
+    }
+  }
+
+  function worldToScreen(x) { return x - cam.x; }
+
+  function drawShrek() {
+    const sx = worldToScreen(player.x);
+    const y = player.y;
+    const ducking = player.ducking;
+    const bodyH = ducking ? 50 : 65;
+    const headR = ducking ? 16 : 22;
+
+    ctx.save();
+    ctx.translate(sx, 0);
+    if (player.dir < 0) ctx.scale(-1, 1);
+
+    // Hurt flash
+    if (player.hurtTimer > 0 && Math.floor(player.hurtTimer / 4) % 2 === 0) {
+      ctx.globalAlpha = 0.4;
+    }
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(0, GROUND_Y + 4, 32, 6, 0, 0, Math.PI*2); ctx.fill();
+
+    const headY = y - bodyH - headR + 4;
+
+    // Legs
+    if (!ducking) {
+      const moving = Math.abs(player.vx) > 0.5 && player.onGround;
+      const phase = moving ? Math.sin(time * 0.4) * 8 : 0;
+      ctx.fillStyle = '#5a8030';
+      ctx.fillRect(-15, y - 24, 12, 24);
+      ctx.fillRect(3, y - 24, 12, 24);
+      ctx.fillStyle = '#3d2810';
+      ctx.fillRect(-17, y - 6 + phase, 16, 6);
+      ctx.fillRect(1, y - 6 - phase, 16, 6);
+    } else {
+      ctx.fillStyle = '#5a8030';
+      ctx.fillRect(-22, y - 14, 44, 14);
+      ctx.fillStyle = '#3d2810';
+      ctx.fillRect(-24, y - 4, 48, 4);
+    }
+
+    // Body
+    const bodyTop = y - bodyH;
+    ctx.fillStyle = '#7faa3f';
+    ctx.fillRect(-22, bodyTop, 44, bodyH - 22);
+    ctx.fillStyle = '#f3eccd';
+    ctx.fillRect(-12, bodyTop, 24, 10);
+    ctx.fillStyle = '#3d2810';
+    ctx.fillRect(-22, y - 28, 44, 6);
+    ctx.fillStyle = '#c9a14a';
+    ctx.fillRect(-3, y - 28, 6, 6);
+
+    // Arms / Punch
+    ctx.fillStyle = '#6a9035';
+    if (player.attackTimer > 0) {
+      // Punch forward
+      const reach = player.attackTimer > 8 ? 30 : 10;
+      ctx.fillRect(0, bodyTop + 14, 20 + reach, 12);
+      // Fist
+      ctx.fillStyle = '#7faa3f';
+      ctx.beginPath();
+      ctx.arc(20 + reach, bodyTop + 20, 9, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#6a9035';
+      ctx.fillRect(-30, bodyTop + 14, 12, 28);
+    } else {
+      const moving = Math.abs(player.vx) > 0.5 && player.onGround;
+      const armPhase = moving ? Math.sin(time * 0.4 + Math.PI) * 5 : 0;
+      if (!ducking) {
+        ctx.fillRect(-30, bodyTop + 12 + armPhase, 12, 30);
+        ctx.fillRect(18, bodyTop + 12 - armPhase, 12, 30);
+      } else {
+        ctx.fillRect(-26, bodyTop + 6, 12, 16);
+        ctx.fillRect(14, bodyTop + 6, 12, 16);
+      }
+    }
+
+    // Head
+    ctx.fillStyle = '#7faa3f';
+    ctx.beginPath();
+    ctx.ellipse(0, headY, headR + 2, headR, 0, 0, Math.PI*2); ctx.fill();
+    // Ears
+    ctx.beginPath();
+    ctx.ellipse(-headR - 2, headY, 7, 4, 0, 0, Math.PI*2);
+    ctx.ellipse(headR + 2, headY, 7, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#5a8030';
+    ctx.fillRect(-headR - 7, headY - 1, 4, 2);
+    ctx.fillRect(headR + 3, headY - 1, 4, 2);
+
+    // Eyes
+    const ey = headY - 4;
+    if (player.blink > 0) {
+      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-7, ey); ctx.lineTo(-1, ey);
+      ctx.moveTo(3, ey); ctx.lineTo(9, ey); ctx.stroke();
+    } else {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(-4, ey, 4, 0, Math.PI*2); ctx.arc(5, ey, 4, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#1a1a1a';
+      ctx.beginPath(); ctx.arc(-3, ey, 2, 0, Math.PI*2); ctx.arc(6, ey, 2, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Mouth
+    ctx.strokeStyle = '#3a4a18'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (player.attackTimer > 8) ctx.arc(0, headY + 8, 5, Math.PI, 0); // angry shout
+    else ctx.arc(0, headY + 6, 6, 0, Math.PI);
+    ctx.stroke();
+
+    ctx.fillStyle = '#6a9035';
+    ctx.beginPath(); ctx.ellipse(0, headY + 2, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawRat(e) {
+    const sx = worldToScreen(e.x);
+    ctx.save();
+    ctx.translate(sx, 0);
+    if (e.dir > 0) ctx.scale(-1, 1);
+    if (e.hurtTimer > 0 && Math.floor(e.hurtTimer / 3) % 2 === 0) ctx.globalAlpha = 0.5;
+    // Body
+    ctx.fillStyle = '#5a4a3a';
+    ctx.beginPath(); ctx.ellipse(0, e.y - 12, 22, 10, 0, 0, Math.PI*2); ctx.fill();
+    // Head
+    ctx.beginPath(); ctx.ellipse(-18, e.y - 14, 10, 8, 0, 0, Math.PI*2); ctx.fill();
+    // Ear
+    ctx.fillStyle = '#7a6a5a';
+    ctx.beginPath(); ctx.arc(-22, e.y - 22, 4, 0, Math.PI*2); ctx.fill();
+    // Eye
+    ctx.fillStyle = '#ff2020';
+    ctx.beginPath(); ctx.arc(-22, e.y - 14, 1.5, 0, Math.PI*2); ctx.fill();
+    // Tail
+    ctx.strokeStyle = '#7a6a5a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(20, e.y - 14);
+    ctx.quadraticCurveTo(35, e.y - 20, 30, e.y - 8); ctx.stroke();
+    // Legs
+    ctx.fillStyle = '#5a4a3a';
+    const phase = Math.sin(time * 0.5) * 3;
+    ctx.fillRect(-8, e.y - 6, 4, 6 + phase);
+    ctx.fillRect(8, e.y - 6, 4, 6 - phase);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawGuard(e) {
+    const sx = worldToScreen(e.x);
+    ctx.save(); ctx.translate(sx, 0);
+    if (e.dir > 0) ctx.scale(-1, 1);
+    if (e.hurtTimer > 0 && Math.floor(e.hurtTimer / 3) % 2 === 0) ctx.globalAlpha = 0.5;
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(0, GROUND_Y + 4, 28, 5, 0, 0, Math.PI*2); ctx.fill();
+    // Legs
+    ctx.fillStyle = '#5a3a2a';
+    ctx.fillRect(-12, e.y - 22, 10, 22);
+    ctx.fillRect(2, e.y - 22, 10, 22);
+    // Body (armor)
+    ctx.fillStyle = '#9090a0';
+    ctx.fillRect(-18, e.y - 60, 36, 38);
+    // Belt
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(-18, e.y - 28, 36, 4);
+    // Head + helmet
+    ctx.fillStyle = '#e0c8a8';
+    ctx.beginPath(); ctx.arc(0, e.y - 70, 12, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#7878a0';
+    ctx.fillRect(-14, e.y - 82, 28, 12);
+    ctx.fillRect(-14, e.y - 70, 28, 4);
+    // Visor slit
+    ctx.fillStyle = '#000';
+    ctx.fillRect(-10, e.y - 76, 20, 2);
+    // Sword
+    ctx.fillStyle = '#bbbbbb';
+    ctx.fillRect(18, e.y - 60, 4, 40);
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(14, e.y - 22, 12, 4);
+    // Arm
+    ctx.fillStyle = '#9090a0';
+    ctx.fillRect(14, e.y - 56, 10, 28);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawArcher(e) {
+    const sx = worldToScreen(e.x);
+    ctx.save(); ctx.translate(sx, 0);
+    if (e.dir > 0) ctx.scale(-1, 1);
+    if (e.hurtTimer > 0 && Math.floor(e.hurtTimer / 3) % 2 === 0) ctx.globalAlpha = 0.5;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(0, GROUND_Y + 4, 24, 5, 0, 0, Math.PI*2); ctx.fill();
+    // Legs
+    ctx.fillStyle = '#3a2a4a';
+    ctx.fillRect(-10, e.y - 22, 8, 22);
+    ctx.fillRect(2, e.y - 22, 8, 22);
+    // Tunic
+    ctx.fillStyle = '#5a4a2a';
+    ctx.fillRect(-16, e.y - 60, 32, 38);
+    // Hood
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath(); ctx.arc(0, e.y - 68, 14, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#e0c8a8';
+    ctx.beginPath(); ctx.arc(0, e.y - 64, 8, 0, Math.PI*2); ctx.fill();
+    // Bow
+    ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(18, e.y - 50, 18, -Math.PI/2 - 0.6, Math.PI/2 + 0.6);
+    ctx.stroke();
+    ctx.strokeStyle = '#dddddd'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(18, e.y - 68); ctx.lineTo(18, e.y - 32); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawArrow(p) {
+    const sx = worldToScreen(p.x);
+    ctx.fillStyle = '#8a5a2a';
+    ctx.fillRect(sx + 6, p.y, p.w - 12, 3);
+    ctx.fillStyle = '#bbbbbb';
+    ctx.beginPath();
+    ctx.moveTo(sx, p.y + 1.5);
+    ctx.lineTo(sx + 10, p.y - 4);
+    ctx.lineTo(sx + 10, p.y + 7);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#d04040';
+    ctx.beginPath();
+    ctx.moveTo(sx + p.w, p.y - 4);
+    ctx.lineTo(sx + p.w - 8, p.y + 1.5);
+    ctx.lineTo(sx + p.w, p.y + 7);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawOnion(p) {
+    const sx = worldToScreen(p.x);
+    const cy = p.y + Math.sin(p.t) * 4 - 15;
+    ctx.fillStyle = '#e6c46b';
+    ctx.beginPath(); ctx.ellipse(sx, cy, 12, 14, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#b8923a'; ctx.lineWidth = 1;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(sx + i*5, cy - 13);
+      ctx.quadraticCurveTo(sx + i*7, cy, sx + i*5, cy + 13);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#3a8a20';
+    ctx.beginPath();
+    ctx.moveTo(sx, cy - 12); ctx.lineTo(sx - 4, cy - 22);
+    ctx.lineTo(sx, cy - 18); ctx.lineTo(sx + 4, cy - 22);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawBoss() {
+    if (!boss) return;
+    const sx = worldToScreen(boss.x);
+    ctx.save(); ctx.translate(sx, 0);
+    if (boss.dir > 0) ctx.scale(-1, 1);
+    if (boss.hurtTimer > 0 && Math.floor(boss.hurtTimer / 3) % 2 === 0) ctx.globalAlpha = 0.5;
+    // Shadow (big — horse)
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(0, GROUND_Y + 4, 50, 7, 0, 0, Math.PI*2); ctx.fill();
+    // Horse legs
+    ctx.fillStyle = '#fafafa';
+    ctx.fillRect(-30, boss.y - 30, 8, 30);
+    ctx.fillRect(-15, boss.y - 30, 8, 30);
+    ctx.fillRect(10, boss.y - 30, 8, 30);
+    ctx.fillRect(25, boss.y - 30, 8, 30);
+    // Horse body
+    ctx.fillStyle = '#fafafa';
+    ctx.fillRect(-35, boss.y - 60, 80, 32);
+    // Horse head
+    ctx.beginPath(); ctx.ellipse(45, boss.y - 60, 18, 12, 0, 0, Math.PI*2); ctx.fill();
+    // Mane
+    ctx.fillStyle = '#dddddd';
+    ctx.fillRect(20, boss.y - 70, 20, 12);
+    // Eye
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(50, boss.y - 60, 1.5, 0, Math.PI*2); ctx.fill();
+    // Saddle
+    ctx.fillStyle = '#7a3030';
+    ctx.fillRect(-20, boss.y - 66, 40, 8);
+    // Farquaad (tiny)
+    const fy = boss.y - 66;
+    // Cloak
+    ctx.fillStyle = '#7a1010';
+    ctx.fillRect(-14, fy - 30, 28, 30);
+    // Head
+    ctx.fillStyle = '#e0c8a8';
+    ctx.beginPath(); ctx.arc(0, fy - 38, 9, 0, Math.PI*2); ctx.fill();
+    // Hair (black bob)
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.arc(0, fy - 42, 10, Math.PI, 0); ctx.fill();
+    ctx.fillRect(-10, fy - 42, 20, 10);
+    // Tiny eyes
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(-3, fy - 38, 1, 0, Math.PI*2); ctx.arc(3, fy - 38, 1, 0, Math.PI*2); ctx.fill();
+    // Mustache
+    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-4, fy - 33); ctx.lineTo(4, fy - 33); ctx.stroke();
+    // Crown
+    ctx.fillStyle = '#ffd840';
+    ctx.fillRect(-8, fy - 50, 16, 4);
+    ctx.beginPath();
+    ctx.moveTo(-8, fy - 50); ctx.lineTo(-5, fy - 55); ctx.lineTo(-2, fy - 50);
+    ctx.lineTo(0, fy - 56); ctx.lineTo(2, fy - 50); ctx.lineTo(5, fy - 55); ctx.lineTo(8, fy - 50);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // HP bar
+    ctx.fillStyle = '#000';
+    ctx.fillRect(W/2 - 152, 50, 304, 18);
+    ctx.fillStyle = '#3a1a1a';
+    ctx.fillRect(W/2 - 150, 52, 300, 14);
+    ctx.fillStyle = '#ff4040';
+    ctx.fillRect(W/2 - 150, 52, 300 * (boss.hp / boss.maxHp), 14);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Trebuchet MS'; ctx.textAlign = 'center';
+    ctx.fillText('LORD FARQUAAD', W/2, 84);
+  }
+
+  function drawFiona() {
+    if (!fiona) return;
+    const sx = worldToScreen(fiona.x);
+    ctx.save();
+    ctx.translate(sx, 0);
+    // sparkle
+    const t = time * 0.1;
+    for (let i = 0; i < 5; i++) {
+      const a = t + i * 1.2;
+      const r = 50 + Math.sin(t + i) * 8;
+      ctx.fillStyle = 'rgba(255, 240, 120, 0.7)';
+      ctx.fillRect(Math.cos(a) * r - 2, fiona.y - 50 + Math.sin(a) * r - 2, 4, 4);
+    }
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(0, GROUND_Y + 4, 22, 5, 0, 0, Math.PI*2); ctx.fill();
+    // Dress
+    ctx.fillStyle = '#3aa050';
+    ctx.beginPath();
+    ctx.moveTo(-22, fiona.y);
+    ctx.lineTo(-12, fiona.y - 50);
+    ctx.lineTo(12, fiona.y - 50);
+    ctx.lineTo(22, fiona.y);
+    ctx.closePath(); ctx.fill();
+    // Body
+    ctx.fillStyle = '#e0c4a8';
+    ctx.fillRect(-9, fiona.y - 65, 18, 18);
+    // Head
+    ctx.beginPath(); ctx.arc(0, fiona.y - 78, 12, 0, Math.PI*2); ctx.fill();
+    // Hair (red bun)
+    ctx.fillStyle = '#c04020';
+    ctx.beginPath(); ctx.arc(0, fiona.y - 86, 11, Math.PI, 0); ctx.fill();
+    ctx.fillRect(-10, fiona.y - 84, 20, 6);
+    // Eyes
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(-4, fiona.y - 78, 1.5, 0, Math.PI*2); ctx.arc(4, fiona.y - 78, 1.5, 0, Math.PI*2); ctx.fill();
+    // Smile
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, fiona.y - 74, 3, 0, Math.PI); ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Trebuchet MS'; ctx.textAlign = 'center';
+    ctx.fillText('Touch Fiona to win!', W/2, 100);
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life / 30);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(worldToScreen(p.x), p.y, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawProgressBar() {
+    if (boss || fiona) return;
+    const pct = Math.min(1, stageProgress / STAGE_LENGTH);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(W/2 - 100, H - 30, 200, 8);
+    ctx.fillStyle = '#b6ff5b';
+    ctx.fillRect(W/2 - 100, H - 30, 200 * pct, 8);
+    ctx.fillStyle = '#fff'; ctx.font = '10px Trebuchet MS'; ctx.textAlign = 'center';
+    ctx.fillText('Stage progress', W/2, H - 16);
+  }
+
+  function draw() {
+    drawSky();
+    drawBackgroundProps();
+    drawGround();
+
+    for (const p of pickups) drawOnion(p);
+    for (const e of enemies) {
+      if (e.type === 'rat') drawRat(e);
+      else if (e.type === 'guard') drawGuard(e);
+      else if (e.type === 'archer') drawArcher(e);
+    }
+    for (const p of projectiles) drawArrow(p);
+    drawBoss();
+    drawFiona();
+    drawShrek();
+    drawParticles();
+    drawProgressBar();
+  }
+
+  // ---------- Loop ----------
+  function loop() {
+    if (state === 'playing') update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function start() {
+    reset();
+    state = 'playing';
+    overlay.classList.add('hidden');
+  }
+
+  function gameOver(victory) {
+    state = 'dead';
+    if (victory) {
+      overlayTitle.textContent = 'YOU SAVED FIONA!';
+      overlayText.innerHTML =
+        `Шрек и Фиона возвращаются на болото жить долго и счастливо. 💚<br><br>
+         Очки: <b>${score}</b> &nbsp; 🧅: <b>${onions}</b><br><br>
+         Жми, чтобы пройти заново.`;
+      startBtn.textContent = 'Сыграть ещё раз';
+    } else {
+      overlayTitle.textContent = 'Donkey, we’re down!';
+      overlayText.innerHTML =
+        `Лорд Фаркуад пока победил...<br><br>
+         Дошёл до stage <b>${stage}</b>. Очки: <b>${score}</b><br><br>
+         Попробуй ещё раз!`;
+      startBtn.textContent = 'Снова в бой';
+    }
+    overlay.classList.remove('hidden');
+  }
+
+  startBtn.addEventListener('click', (e) => { e.stopPropagation(); start(); });
+  startBtn.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); start(); }, { passive: false });
+  // Tap ANYWHERE on the overlay to start (mobile-friendly)
+  overlay.addEventListener('click', () => { if (state !== 'playing') start(); });
+  overlay.addEventListener('touchstart', (e) => {
+    if (state !== 'playing') { e.preventDefault(); start(); }
+  }, { passive: false });
+  overlay.addEventListener('touchend', (e) => {
+    if (state !== 'playing') { e.preventDefault(); start(); }
+  }, { passive: false });
+  // Also: tap anywhere on canvas/wrap when in menu
+  document.getElementById('wrap').addEventListener('touchstart', (e) => {
+    if (state !== 'playing') { start(); }
+  }, { passive: true });
+  window.addEventListener('keydown', e => {
+    if ((state !== 'playing') && (e.code === 'Enter' || e.code === 'Space')) {
+      e.preventDefault(); start();
+    }
+  });
+
+  reset();
+  state = 'menu';
+  loop();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shrek Swamp Run</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: #0b1d0b;
+    color: #e8ffd1;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+  h1 {
+    font-size: 28px;
+    color: #b6ff5b;
+    text-shadow: 2px 2px 0 #000;
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+  }
+  #wrap {
+    position: relative;
+    width: min(960px, 96vw);
+    aspect-ratio: 16 / 9;
+    border: 4px solid #4a7a1a;
+    border-radius: 12px;
+    box-shadow: 0 0 30px rgba(120, 220, 60, 0.35);
+    overflow: hidden;
+    background: #5a8a2a;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+  }
+  #hud {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    right: 12px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 2px 2px 0 #000;
+    pointer-events: none;
+  }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 20px;
+    backdrop-filter: blur(2px);
+  }
+  #overlay h2 {
+    color: #b6ff5b;
+    font-size: 36px;
+    text-shadow: 3px 3px 0 #000;
+    margin-bottom: 12px;
+  }
+  #overlay p {
+    font-size: 16px;
+    line-height: 1.5;
+    margin-bottom: 18px;
+    max-width: 520px;
+  }
+  button {
+    background: #7bbf2a;
+    color: #1a2e0a;
+    border: 3px solid #2c4a0e;
+    border-radius: 10px;
+    padding: 12px 22px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #2c4a0e;
+    transition: transform 0.05s ease;
+  }
+  button:hover { background: #94d83a; }
+  button:active { transform: translateY(2px); box-shadow: 0 2px 0 #2c4a0e; }
+  .hidden { display: none !important; }
+  .tag { color: #ffe066; }
+  footer {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #8fbf5a;
+  }
+</style>
+</head>
+<body>
+  <h1>SHREK SWAMP RUN</h1>
+  <div id="wrap">
+    <canvas id="game" width="960" height="540"></canvas>
+    <div id="hud">
+      <div>Score: <span id="score">0</span></div>
+      <div>Onions: <span id="onions">0</span></div>
+      <div>Best: <span id="best">0</span></div>
+    </div>
+    <div id="overlay">
+      <h2>Get out of my swamp!</h2>
+      <p>
+        Помоги Шреку добежать до болота.<br>
+        <span class="tag">SPACE / ↑ / клик</span> — прыжок (двойной прыжок тоже работает).<br>
+        <span class="tag">↓</span> — пригнуться. Собирай <b>лук 🧅</b>, уворачивайся от знаков Фаркуада и стрел.
+      </p>
+      <button id="startBtn">Начать игру</button>
+    </div>
+  </div>
+  <footer>Сделано на чистом HTML5 Canvas • прыгай, собирай лук, выживай</footer>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const GROUND_Y = H - 90;
+
+  const scoreEl = document.getElementById('score');
+  const onionsEl = document.getElementById('onions');
+  const bestEl = document.getElementById('best');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = overlay.querySelector('h2');
+  const overlayText = overlay.querySelector('p');
+  const startBtn = document.getElementById('startBtn');
+
+  let best = +localStorage.getItem('shrek_best') || 0;
+  bestEl.textContent = best;
+
+  // Input
+  const keys = {};
+  let jumpQueued = false, duckHeld = false;
+  window.addEventListener('keydown', e => {
+    if (['Space','ArrowUp','ArrowDown','KeyW','KeyS'].includes(e.code)) e.preventDefault();
+    keys[e.code] = true;
+    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') jumpQueued = true;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') duckHeld = true;
+  });
+  window.addEventListener('keyup', e => {
+    keys[e.code] = false;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') duckHeld = false;
+  });
+  canvas.addEventListener('pointerdown', () => { jumpQueued = true; });
+
+  // Game state
+  let state = 'menu'; // menu | playing | dead
+  let score = 0, onions = 0, speed = 8, time = 0;
+  let obstacles = [], pickups = [], particles = [], clouds = [], trees = [];
+
+  const shrek = {
+    x: 140, y: GROUND_Y, w: 70, h: 90,
+    vy: 0, onGround: true, jumps: 0, ducking: false,
+    blink: 0,
+  };
+
+  function reset() {
+    score = 0; onions = 0; speed = 8; time = 0;
+    obstacles.length = 0; pickups.length = 0; particles.length = 0;
+    shrek.y = GROUND_Y; shrek.vy = 0; shrek.onGround = true; shrek.jumps = 0;
+    shrek.ducking = false;
+    spawnTimer = 60;
+    clouds = Array.from({length: 5}, () => makeCloud(true));
+    trees = Array.from({length: 6}, (_, i) => ({ x: i * 200 + Math.random()*100, scale: 0.7 + Math.random()*0.6 }));
+  }
+
+  function makeCloud(initial=false) {
+    return {
+      x: initial ? Math.random() * W : W + 50,
+      y: 40 + Math.random() * 160,
+      s: 0.6 + Math.random() * 0.8,
+      v: 0.3 + Math.random() * 0.4,
+    };
+  }
+
+  // Spawning
+  let spawnTimer = 60;
+  function maybeSpawn() {
+    spawnTimer--;
+    if (spawnTimer > 0) return;
+    spawnTimer = Math.max(28, 80 - Math.floor(score / 200)) + Math.floor(Math.random() * 40);
+
+    const r = Math.random();
+    if (r < 0.5) {
+      // Farquaad sign (ground)
+      obstacles.push({ type: 'sign', x: W + 20, y: GROUND_Y - 50, w: 38, h: 60 });
+    } else if (r < 0.78) {
+      // Arrow (flying)
+      const high = Math.random() < 0.5;
+      obstacles.push({
+        type: 'arrow',
+        x: W + 20,
+        y: high ? GROUND_Y - 130 : GROUND_Y - 70,
+        w: 50, h: 14,
+        vx: -2,
+      });
+    } else if (r < 0.92) {
+      // Onion pickup
+      pickups.push({ type: 'onion', x: W + 20, y: GROUND_Y - 80 - Math.random()*80, w: 28, h: 32, t: 0 });
+    } else {
+      // Stack of two signs
+      obstacles.push({ type: 'sign', x: W + 20, y: GROUND_Y - 50, w: 38, h: 60 });
+      obstacles.push({ type: 'sign', x: W + 60, y: GROUND_Y - 50, w: 38, h: 60 });
+    }
+  }
+
+  function rectsOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function shrekHitbox() {
+    const h = shrek.ducking ? 55 : shrek.h;
+    return { x: shrek.x + 8, y: shrek.y - h, w: shrek.w - 16, h: h };
+  }
+
+  function update() {
+    time++;
+    score += Math.floor(speed * 0.4);
+    speed = Math.min(20, 8 + score / 800);
+
+    // Jump
+    if (jumpQueued) {
+      jumpQueued = false;
+      if (shrek.jumps < 2) {
+        shrek.vy = shrek.jumps === 0 ? -18 : -15;
+        shrek.onGround = false;
+        shrek.jumps++;
+        burst(shrek.x + shrek.w/2, shrek.y, 6, '#a8d850');
+      }
+    }
+    shrek.ducking = duckHeld && shrek.onGround;
+
+    // Gravity
+    shrek.vy += 0.9;
+    shrek.y += shrek.vy;
+    if (shrek.y >= GROUND_Y) {
+      shrek.y = GROUND_Y;
+      shrek.vy = 0;
+      shrek.onGround = true;
+      shrek.jumps = 0;
+    }
+
+    // Background
+    for (const c of clouds) {
+      c.x -= c.v;
+      if (c.x < -100) Object.assign(c, makeCloud(false));
+    }
+    for (const t of trees) {
+      t.x -= speed * 0.4;
+      if (t.x < -100) { t.x = W + Math.random()*120; t.scale = 0.7 + Math.random()*0.6; }
+    }
+
+    // Obstacles
+    maybeSpawn();
+    for (const o of obstacles) {
+      o.x -= speed + (o.vx || 0);
+    }
+    for (const p of pickups) {
+      p.x -= speed;
+      p.t = (p.t || 0) + 0.15;
+    }
+    obstacles = obstacles.filter(o => o.x + o.w > -10);
+    pickups = pickups.filter(p => p.x + p.w > -10);
+
+    // Particles
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.3; p.life--;
+    }
+    particles = particles.filter(p => p.life > 0);
+
+    // Footprints / running dust
+    if (shrek.onGround && time % 6 === 0) {
+      burst(shrek.x + 10, GROUND_Y, 2, '#3a5a18', 0.5);
+    }
+
+    // Collisions
+    const sh = shrekHitbox();
+    for (const o of obstacles) {
+      if (rectsOverlap(sh, o)) {
+        gameOver();
+        return;
+      }
+    }
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      const p = pickups[i];
+      if (rectsOverlap(sh, p)) {
+        pickups.splice(i, 1);
+        onions++;
+        score += 50;
+        burst(p.x + p.w/2, p.y + p.h/2, 14, '#e6c46b');
+      }
+    }
+
+    scoreEl.textContent = score;
+    onionsEl.textContent = onions;
+
+    shrek.blink = Math.max(0, shrek.blink - 1);
+    if (Math.random() < 0.005) shrek.blink = 8;
+  }
+
+  function burst(x, y, n, color, scale=1) {
+    for (let i = 0; i < n; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 4 * scale,
+        vy: (Math.random() - 1) * 3 * scale,
+        life: 20 + Math.random() * 15,
+        color,
+        size: 2 + Math.random() * 3,
+      });
+    }
+  }
+
+  // ---------- Drawing ----------
+  function drawSky() {
+    const g = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+    g.addColorStop(0, '#7fb84a');
+    g.addColorStop(1, '#c5e58a');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, GROUND_Y);
+
+    // sun
+    ctx.fillStyle = '#fff5b8';
+    ctx.beginPath(); ctx.arc(W - 100, 90, 40, 0, Math.PI*2); ctx.fill();
+
+    // clouds
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (const c of clouds) {
+      const r = 18 * c.s;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI*2);
+      ctx.arc(c.x + r, c.y + 4, r*0.9, 0, Math.PI*2);
+      ctx.arc(c.x - r, c.y + 4, r*0.9, 0, Math.PI*2);
+      ctx.arc(c.x + r*1.6, c.y - 2, r*0.7, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawTrees() {
+    for (const t of trees) {
+      const baseX = t.x;
+      const baseY = GROUND_Y;
+      const s = t.scale;
+      // trunk
+      ctx.fillStyle = '#5a3a1a';
+      ctx.fillRect(baseX - 6*s, baseY - 60*s, 12*s, 60*s);
+      // canopy
+      ctx.fillStyle = '#2a5a18';
+      ctx.beginPath();
+      ctx.arc(baseX, baseY - 70*s, 35*s, 0, Math.PI*2);
+      ctx.arc(baseX - 22*s, baseY - 60*s, 28*s, 0, Math.PI*2);
+      ctx.arc(baseX + 22*s, baseY - 60*s, 28*s, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawGround() {
+    // swamp ground
+    const g = ctx.createLinearGradient(0, GROUND_Y, 0, H);
+    g.addColorStop(0, '#3a5a18');
+    g.addColorStop(1, '#1e3408');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+
+    // running pattern
+    ctx.fillStyle = '#2a4410';
+    const off = -((time * speed) % 60);
+    for (let x = off; x < W; x += 60) {
+      ctx.fillRect(x, GROUND_Y + 4, 30, 4);
+      ctx.fillRect(x + 15, GROUND_Y + 22, 30, 4);
+    }
+  }
+
+  function drawShrek() {
+    const x = shrek.x, y = shrek.y;
+    const ducking = shrek.ducking;
+    const bodyH = ducking ? 55 : 70;
+    const headR = ducking ? 16 : 22;
+    const headY = y - bodyH - headR + 4;
+
+    ctx.save();
+    ctx.translate(x, 0);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(35, GROUND_Y + 4, 32, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Legs (animated)
+    if (!ducking) {
+      const phase = Math.sin(time * 0.4) * 6;
+      ctx.fillStyle = '#5a8030';
+      ctx.fillRect(15, y - 24, 14, 24 + (shrek.onGround ? phase : 0));
+      ctx.fillRect(40, y - 24, 14, 24 + (shrek.onGround ? -phase : 0));
+      // shoes
+      ctx.fillStyle = '#3d2810';
+      ctx.fillRect(12, y - 6 + (shrek.onGround ? phase : 0), 20, 6);
+      ctx.fillRect(38, y - 6 + (shrek.onGround ? -phase : 0), 20, 6);
+    } else {
+      ctx.fillStyle = '#5a8030';
+      ctx.fillRect(10, y - 14, 50, 14);
+      ctx.fillStyle = '#3d2810';
+      ctx.fillRect(8, y - 4, 54, 4);
+    }
+
+    // Body (vest)
+    ctx.fillStyle = '#7faa3f';
+    const bodyTop = y - bodyH;
+    ctx.fillRect(8, bodyTop, 54, bodyH - 22);
+    // Shirt collar (white)
+    ctx.fillStyle = '#f3eccd';
+    ctx.fillRect(20, bodyTop, 30, 10);
+    // belt
+    ctx.fillStyle = '#3d2810';
+    ctx.fillRect(8, y - 28, 54, 6);
+    ctx.fillStyle = '#c9a14a';
+    ctx.fillRect(31, y - 28, 8, 6);
+
+    // Arms (swing)
+    const armPhase = Math.sin(time * 0.4 + Math.PI) * 6;
+    ctx.fillStyle = '#6a9035';
+    if (!ducking) {
+      ctx.fillRect(0, bodyTop + 12 + armPhase, 12, 32);
+      ctx.fillRect(58, bodyTop + 12 - armPhase, 12, 32);
+    } else {
+      ctx.fillRect(2, bodyTop + 8, 12, 18);
+      ctx.fillRect(56, bodyTop + 8, 12, 18);
+    }
+
+    // Head
+    ctx.fillStyle = '#7faa3f';
+    ctx.beginPath();
+    ctx.ellipse(35, headY, headR + 2, headR, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Ears (trumpet ears)
+    ctx.fillStyle = '#7faa3f';
+    ctx.beginPath();
+    ctx.ellipse(35 - headR - 2, headY, 7, 4, 0, 0, Math.PI*2);
+    ctx.ellipse(35 + headR + 2, headY, 7, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#5a8030';
+    ctx.fillRect(35 - headR - 7, headY - 1, 4, 2);
+    ctx.fillRect(35 + headR + 3, headY - 1, 4, 2);
+
+    // Eyes
+    const ey = headY - 4;
+    if (shrek.blink > 0) {
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(28, ey); ctx.lineTo(34, ey);
+      ctx.moveTo(38, ey); ctx.lineTo(44, ey);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(31, ey, 4, 0, Math.PI*2); ctx.arc(40, ey, 4, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#1a1a1a';
+      ctx.beginPath(); ctx.arc(32, ey, 2, 0, Math.PI*2); ctx.arc(41, ey, 2, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Mouth
+    ctx.strokeStyle = '#3a4a18';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(35, headY + 6, 6, 0, Math.PI);
+    ctx.stroke();
+
+    // Nose
+    ctx.fillStyle = '#6a9035';
+    ctx.beginPath();
+    ctx.ellipse(35, headY + 2, 4, 3, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawSign(o) {
+    // Farquaad's "WANTED" sign
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(o.x + o.w/2 - 3, o.y, 6, o.h);
+    ctx.fillStyle = '#e8d6a3';
+    ctx.fillRect(o.x - 4, o.y - 4, o.w + 8, 28);
+    ctx.strokeStyle = '#5a3a1a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(o.x - 4, o.y - 4, o.w + 8, 28);
+    ctx.fillStyle = '#a02020';
+    ctx.font = 'bold 11px Trebuchet MS';
+    ctx.textAlign = 'center';
+    ctx.fillText('WANTED', o.x + o.w/2, o.y + 12);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = 'bold 9px Trebuchet MS';
+    ctx.fillText('OGRE', o.x + o.w/2, o.y + 22);
+  }
+
+  function drawArrow(o) {
+    // shaft
+    ctx.fillStyle = '#8a5a2a';
+    ctx.fillRect(o.x + 8, o.y + 4, o.w - 16, 4);
+    // head
+    ctx.fillStyle = '#bbbbbb';
+    ctx.beginPath();
+    ctx.moveTo(o.x, o.y + 6);
+    ctx.lineTo(o.x + 14, o.y);
+    ctx.lineTo(o.x + 14, o.y + 12);
+    ctx.closePath();
+    ctx.fill();
+    // fletching
+    ctx.fillStyle = '#d04040';
+    ctx.beginPath();
+    ctx.moveTo(o.x + o.w, o.y);
+    ctx.lineTo(o.x + o.w - 10, o.y + 6);
+    ctx.lineTo(o.x + o.w, o.y + 12);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawOnion(p) {
+    const cx = p.x + p.w/2;
+    const cy = p.y + p.h/2 + Math.sin(p.t) * 4;
+    // bulb
+    ctx.fillStyle = '#e6c46b';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 12, 14, 0, 0, Math.PI*2);
+    ctx.fill();
+    // stripes
+    ctx.strokeStyle = '#b8923a';
+    ctx.lineWidth = 1;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(cx + i*5, cy - 13);
+      ctx.quadraticCurveTo(cx + i*7, cy, cx + i*5, cy + 13);
+      ctx.stroke();
+    }
+    // sprout
+    ctx.fillStyle = '#3a8a20';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 12);
+    ctx.lineTo(cx - 4, cy - 22);
+    ctx.lineTo(cx, cy - 18);
+    ctx.lineTo(cx + 4, cy - 22);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life / 30);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function draw() {
+    drawSky();
+    drawTrees();
+    drawGround();
+
+    for (const o of obstacles) {
+      if (o.type === 'sign') drawSign(o);
+      else if (o.type === 'arrow') drawArrow(o);
+    }
+    for (const p of pickups) drawOnion(p);
+    drawShrek();
+    drawParticles();
+  }
+
+  // ---------- Loop ----------
+  function loop() {
+    if (state === 'playing') {
+      update();
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function start() {
+    reset();
+    state = 'playing';
+    overlay.classList.add('hidden');
+  }
+
+  function gameOver() {
+    state = 'dead';
+    if (score > best) {
+      best = score;
+      localStorage.setItem('shrek_best', best);
+      bestEl.textContent = best;
+    }
+    overlayTitle.textContent = 'Donkey, we’re down!';
+    overlayText.innerHTML =
+      `Очки: <b>${score}</b> • Лука собрано: <b>${onions}</b> 🧅<br>Лучший результат: <b>${best}</b><br><br>Жми, чтобы попробовать снова.`;
+    startBtn.textContent = 'Ещё раз';
+    overlay.classList.remove('hidden');
+  }
+
+  startBtn.addEventListener('click', start);
+  window.addEventListener('keydown', e => {
+    if ((state !== 'playing') && (e.code === 'Space' || e.code === 'Enter')) {
+      e.preventDefault();
+      start();
+    }
+  });
+
+  // Initial state — show menu, draw a static frame
+  reset();
+  state = 'menu';
+  loop();
+})();
+</script>
+</body>
+</html>

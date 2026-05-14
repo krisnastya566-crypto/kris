@@ -54,11 +54,12 @@
   #hudLeft, #hudRight { display: flex; align-items: center; gap: 10px; }
   #overlay {
     position: absolute; inset: 0;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0,0,0,0.7);
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     text-align: center; padding: 20px;
-    backdrop-filter: blur(2px);
+    cursor: pointer;
+    z-index: 10;
   }
   #overlay h2 { color: #b6ff5b; font-size: 32px; text-shadow: 3px 3px 0 #000; margin-bottom: 12px; }
   #overlay p { font-size: 15px; line-height: 1.6; margin-bottom: 18px; max-width: 560px; }
@@ -1179,11 +1180,19 @@
   }
 
   startBtn.addEventListener('click', (e) => { e.stopPropagation(); start(); });
+  startBtn.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); start(); }, { passive: false });
   // Tap ANYWHERE on the overlay to start (mobile-friendly)
   overlay.addEventListener('click', () => { if (state !== 'playing') start(); });
+  overlay.addEventListener('touchstart', (e) => {
+    if (state !== 'playing') { e.preventDefault(); start(); }
+  }, { passive: false });
   overlay.addEventListener('touchend', (e) => {
     if (state !== 'playing') { e.preventDefault(); start(); }
   }, { passive: false });
+  // Also: tap anywhere on canvas/wrap when in menu
+  document.getElementById('wrap').addEventListener('touchstart', (e) => {
+    if (state !== 'playing') { start(); }
+  }, { passive: true });
   window.addEventListener('keydown', e => {
     if ((state !== 'playing') && (e.code === 'Enter' || e.code === 'Space')) {
       e.preventDefault(); start();

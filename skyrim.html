@@ -189,6 +189,99 @@
   #shoutFX.on { opacity: 1; }
 
   footer { margin-top: 6px; font-size: 11px; color: #5a4a2a; letter-spacing: 1px; }
+
+  /* Mobile touch controls */
+  #touch {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    display: none;
+    z-index: 5;
+  }
+  #touch.show { display: block; }
+  #joy {
+    position: absolute;
+    left: 20px; bottom: 20px;
+    width: 130px; height: 130px;
+    border-radius: 50%;
+    background: rgba(20,20,30,0.45);
+    border: 2px solid rgba(201, 178, 122, 0.5);
+    pointer-events: auto;
+    touch-action: none;
+  }
+  #joyKnob {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 56px; height: 56px;
+    margin-left: -28px; margin-top: -28px;
+    border-radius: 50%;
+    background: rgba(201, 178, 122, 0.7);
+    border: 2px solid #c9b27a;
+    pointer-events: none;
+    transition: background 0.1s;
+  }
+  .tbtn {
+    position: absolute;
+    pointer-events: auto;
+    background: rgba(40, 30, 20, 0.6);
+    border: 2px solid rgba(201, 178, 122, 0.6);
+    color: #e8dcb8;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+    font-family: "Trebuchet MS", sans-serif;
+    text-align: center;
+    line-height: 1.05;
+  }
+  .tbtn:active, .tbtn.held {
+    background: rgba(201, 178, 122, 0.7);
+    color: #1a1a1a;
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.4);
+  }
+  #tAttack {
+    right: 20px; bottom: 20px;
+    width: 84px; height: 84px;
+    font-size: 13px;
+    background: rgba(120, 40, 30, 0.65);
+    border-color: rgba(255, 120, 80, 0.7);
+  }
+  #tShout {
+    right: 110px; bottom: 60px;
+    width: 64px; height: 64px;
+    font-size: 11px;
+    background: rgba(40, 60, 120, 0.65);
+    border-color: rgba(140, 180, 255, 0.7);
+  }
+  #tInteract {
+    right: 30px; bottom: 120px;
+    width: 60px; height: 60px;
+    font-size: 22px;
+  }
+  #tRun {
+    right: 116px; bottom: 138px;
+    width: 56px; height: 56px;
+    font-size: 11px;
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    #touch { display: block; }
+    h1 { font-size: 18px; margin-bottom: 4px; letter-spacing: 2px; }
+    footer { display: none; }
+    #questBox { width: 160px; font-size: 10px; padding: 4px 6px; top: 84px; }
+    #hud { font-size: 11px; }
+    .bar { width: 110px; height: 10px; }
+    .label { font-size: 10px; }
+    #narr { font-size: 13px; padding: 8px 10px; bottom: auto; top: 56px; left: 6px; right: 180px; }
+    #dialog { left: 6px; right: 6px; bottom: 6px; padding: 8px; }
+    #dialog .body { max-height: 90px; font-size: 13px; }
+    #dialog .opt { font-size: 12px; padding: 5px 8px; }
+    #dialog input { font-size: 13px; }
+    #overlay p { font-size: 12px; }
+    #overlay h2 { font-size: 26px; }
+  }
 </style>
 </head>
 <body>
@@ -197,6 +290,14 @@
     <canvas id="game" width="1100" height="619"></canvas>
 
     <div id="shoutFX"></div>
+
+    <div id="touch">
+      <div id="joy"><div id="joyKnob"></div></div>
+      <div id="tRun" class="tbtn">БЕГ</div>
+      <div id="tInteract" class="tbtn">E</div>
+      <div id="tShout" class="tbtn">ФУС<br>РО ДА</div>
+      <div id="tAttack" class="tbtn">МЕЧ</div>
+    </div>
 
     <div id="hud">
       <div id="hudLeft">
@@ -246,6 +347,9 @@
         <span class="key">Q</span> — Крик «ФУС РО ДА» (тратит магию) &nbsp;
         <span class="key">Shift</span> — бег &nbsp;
         <span class="key">M</span> — карта (TAB)
+      </p>
+      <p style="color:#c9b27a;font-size:13px">
+        📱 На телефоне: слева — джойстик, справа — МЕЧ / ФУС РО ДА / E / БЕГ
       </p>
       <p style="color:#8fb8e8;font-size:12px">
         Подключение к нейросети — Pollinations.ai (бесплатно, без ключа).<br>
@@ -300,6 +404,104 @@
   let mouseDown = false;
   canvas.addEventListener('mousedown', () => { mouseDown = true; });
   canvas.addEventListener('mouseup',   () => { mouseDown = false; });
+
+  // ============ TOUCH CONTROLS ============
+  const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  if (isTouch) document.getElementById('touch').classList.add('show');
+
+  // Virtual joystick -> sets touch.mx/my in [-1..1]
+  const touchMove = { mx: 0, my: 0, active: false };
+  const joy = document.getElementById('joy');
+  const joyKnob = document.getElementById('joyKnob');
+  if (joy) {
+    let joyId = null;
+    const center = () => {
+      const r = joy.getBoundingClientRect();
+      return { cx: r.left + r.width/2, cy: r.top + r.height/2, R: r.width/2 };
+    };
+    const setKnob = (dx, dy) => {
+      joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+    };
+    const onStart = (e) => {
+      const t = e.changedTouches ? e.changedTouches[0] : e;
+      joyId = e.changedTouches ? t.identifier : 'mouse';
+      touchMove.active = true;
+      onMove(e);
+      e.preventDefault();
+    };
+    const onMove = (e) => {
+      if (!touchMove.active) return;
+      let pt = null;
+      if (e.changedTouches) {
+        for (const tc of e.touches) if (tc.identifier === joyId) { pt = tc; break; }
+      } else {
+        pt = e;
+      }
+      if (!pt) return;
+      const { cx, cy, R } = center();
+      let dx = pt.clientX - cx, dy = pt.clientY - cy;
+      const d = Math.hypot(dx, dy);
+      const max = R - 8;
+      if (d > max) { dx = dx / d * max; dy = dy / d * max; }
+      setKnob(dx, dy);
+      const norm = Math.max(R, 1);
+      touchMove.mx = Math.max(-1, Math.min(1, dx / max));
+      touchMove.my = Math.max(-1, Math.min(1, dy / max));
+      e.preventDefault();
+    };
+    const onEnd = (e) => {
+      if (e.changedTouches) {
+        let found = false;
+        for (const tc of e.changedTouches) if (tc.identifier === joyId) { found = true; break; }
+        if (!found) return;
+      }
+      touchMove.active = false; touchMove.mx = 0; touchMove.my = 0;
+      joyId = null;
+      setKnob(0, 0);
+      e.preventDefault();
+    };
+    joy.addEventListener('touchstart', onStart, { passive: false });
+    joy.addEventListener('touchmove',  onMove,  { passive: false });
+    joy.addEventListener('touchend',   onEnd,   { passive: false });
+    joy.addEventListener('touchcancel',onEnd,   { passive: false });
+    // mouse fallback for desktop testing
+    joy.addEventListener('mousedown', (e) => { onStart(e); });
+    window.addEventListener('mousemove', (e) => { if (touchMove.active && joyId === 'mouse') onMove(e); });
+    window.addEventListener('mouseup',   (e) => { if (joyId === 'mouse') onEnd(e); });
+  }
+
+  // Touch action buttons -> map to keys
+  const touchBtnState = { run: false, attack: false };
+  function bindTouchBtn(id, opts) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const press = (e) => {
+      e.preventDefault();
+      el.classList.add('held');
+      if (opts.code) {
+        if (!keys[opts.code]) pressed[opts.code] = true;
+        keys[opts.code] = true;
+      }
+      if (opts.flag) touchBtnState[opts.flag] = true;
+      if (opts.tap) opts.tap();
+    };
+    const release = (e) => {
+      e.preventDefault();
+      el.classList.remove('held');
+      if (opts.code) keys[opts.code] = false;
+      if (opts.flag) touchBtnState[opts.flag] = false;
+    };
+    el.addEventListener('touchstart', press, { passive: false });
+    el.addEventListener('touchend',   release, { passive: false });
+    el.addEventListener('touchcancel',release, { passive: false });
+    el.addEventListener('mousedown',  press);
+    el.addEventListener('mouseup',    release);
+    el.addEventListener('mouseleave', release);
+  }
+  bindTouchBtn('tAttack',   { flag: 'attack' });
+  bindTouchBtn('tShout',    { code: 'KeyQ' });
+  bindTouchBtn('tInteract', { code: 'KeyE' });
+  bindTouchBtn('tRun',      { flag: 'run' });
 
   // ============ WORLD ============
   // Top-down. World coords. Camera follows player.
@@ -707,7 +909,12 @@
     if (keys.KeyS) my += 1;
     if (keys.KeyA) mx -= 1;
     if (keys.KeyD) mx += 1;
-    const running = keys.ShiftLeft && player.stam > 0;
+    // Touch joystick
+    if (touchMove.active) {
+      mx += touchMove.mx;
+      my += touchMove.my;
+    }
+    const running = (keys.ShiftLeft || touchBtnState.run) && player.stam > 0;
     let sp = player.speed * (running ? 1.8 : 1);
     if (mx || my) {
       const len = Math.hypot(mx, my);
@@ -776,8 +983,8 @@
 
     // Combat input
     if (!dialogEl.classList.contains('show')) {
-      if (mouseDown || keys.KeyF || take('KeyF')) {
-        if (mouseDown || keys.KeyF) playerAttack();
+      if (mouseDown || keys.KeyF || touchBtnState.attack || take('KeyF')) {
+        if (mouseDown || keys.KeyF || touchBtnState.attack) playerAttack();
       }
       if (take('KeyQ')) shout();
     }

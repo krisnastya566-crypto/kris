@@ -361,6 +361,9 @@
         Если интернета нет — NPC отвечают офлайн-фразами.
       </p>
       <button id="startBtn">FUS RO DAH — НАЧАТЬ</button>
+      <p style="color:#c9b27a;font-size:14px;margin-top:14px;font-weight:bold">
+        👆 ТАПНИ В ЛЮБОМ МЕСТЕ ЭКРАНА — ИГРА ЗАПУСТИТСЯ
+      </p>
     </div>
   </div>
   <footer>Canvas · LLM-powered NPCs · v1.0</footer>
@@ -1424,24 +1427,29 @@
     narrate('', 'Скайрим. Холод. Где-то на севере ревёт дракон.');
   }
 
-  // Robust start handler — works on mobile (touchstart fires before onclick on iOS)
+  // Robust start handler — ANY tap/click starts the game
   let _started = false;
   function tryStart(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
-    if (_started) { _started = false; startGame(); return; }
+    if (_started) return;
     _started = true;
+    if (e) { try { e.preventDefault(); } catch(_){} try { e.stopPropagation(); } catch(_){} }
     startGame();
-    setTimeout(() => { _started = false; }, 1000);
   }
-  startBtn.addEventListener('click', tryStart);
-  startBtn.addEventListener('touchend', tryStart, { passive: false });
-  // Fallback: any tap on overlay also starts the game
-  overlay.addEventListener('touchend', (e) => {
-    if (overlay.style.display !== 'none') tryStart(e);
-  }, { passive: false });
-  overlay.addEventListener('click', (e) => {
-    if (overlay.style.display !== 'none' && e.target !== startBtn) tryStart(e);
-  });
+  // Listen on EVERYTHING — button, overlay, whole window — until game starts
+  function attachStartListeners() {
+    const targets = [startBtn, overlay, document, window];
+    const events = ['click', 'touchstart', 'touchend', 'pointerdown', 'mousedown'];
+    const handler = (e) => {
+      if (overlay.style.display === 'none') return;
+      tryStart(e);
+    };
+    for (const t of targets) {
+      for (const ev of events) {
+        try { t.addEventListener(ev, handler, { passive: false, capture: true }); } catch(_) {}
+      }
+    }
+  }
+  attachStartListeners();
 
   renderQuests();
   updateHud();

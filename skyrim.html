@@ -156,9 +156,14 @@
   #overlay button {
     background: #5a4a2a; color: #e8dcb8;
     border: 2px solid #c9b27a; border-radius: 4px;
-    padding: 12px 28px; font-size: 18px; font-weight: bold;
+    padding: 16px 32px; font-size: 20px; font-weight: bold;
     cursor: pointer; letter-spacing: 2px;
     margin-top: 10px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(201,178,122,0.4);
+    pointer-events: auto;
+    position: relative;
+    z-index: 11;
   }
   #overlay button:hover { background: #7a6a3a; }
 
@@ -1419,7 +1424,25 @@
     narrate('', 'Скайрим. Холод. Где-то на севере ревёт дракон.');
   }
 
-  startBtn.onclick = startGame;
+  // Robust start handler — works on mobile (touchstart fires before onclick on iOS)
+  let _started = false;
+  function tryStart(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (_started) { _started = false; startGame(); return; }
+    _started = true;
+    startGame();
+    setTimeout(() => { _started = false; }, 1000);
+  }
+  startBtn.addEventListener('click', tryStart);
+  startBtn.addEventListener('touchend', tryStart, { passive: false });
+  // Fallback: any tap on overlay also starts the game
+  overlay.addEventListener('touchend', (e) => {
+    if (overlay.style.display !== 'none') tryStart(e);
+  }, { passive: false });
+  overlay.addEventListener('click', (e) => {
+    if (overlay.style.display !== 'none' && e.target !== startBtn) tryStart(e);
+  });
+
   renderQuests();
   updateHud();
   loop();

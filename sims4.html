@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>The Sims 4 — Web Edition</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width:100%; height:100%; overflow:hidden; font-family: 'Trebuchet MS', sans-serif; background:#0a0a14; color:#fff; }
+  canvas { display:block; }
+
+  /* Загрузочный экран */
+  #loader {
+    position:fixed; inset:0; background: linear-gradient(135deg,#0a3d62,#1e6091,#3c93c2);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:200; transition: opacity .6s;
+  }
+  #loader h1 { font-size: 64px; letter-spacing:4px; text-shadow: 0 0 30px #2ecc71, 0 0 10px #fff; margin-bottom:20px;}
+  #loader p { font-size:18px; opacity:.85; }
+  .plumb-anim {
+    width:80px; height:80px; margin:30px 0;
+    background: linear-gradient(180deg,#7CFC00,#2ecc71,#0a8a3a);
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    box-shadow: 0 0 40px #2ecc71;
+    animation: spin 2s linear infinite, glow 1.5s ease-in-out infinite alternate;
+  }
+  @keyframes spin { to { transform: rotateY(360deg); } }
+  @keyframes glow { to { box-shadow: 0 0 80px #7CFC00; } }
+
+  /* HUD */
+  #hud {
+    position:fixed; top:10px; left:10px; right:10px; display:flex; justify-content:space-between;
+    z-index:50; pointer-events:none;
+  }
+  .panel {
+    background: rgba(10,30,60,.75); backdrop-filter: blur(8px);
+    border:1px solid #4ab0ff; border-radius:10px; padding:10px 14px;
+    pointer-events:auto; box-shadow:0 4px 20px rgba(0,0,0,.5);
+  }
+  #needs { display:flex; gap:10px; flex-direction:column; min-width:220px; }
+  .need { display:flex; align-items:center; gap:8px; font-size:13px; }
+  .need-label { width:70px; }
+  .bar { flex:1; height:10px; background:#222; border-radius:5px; overflow:hidden; }
+  .bar > div { height:100%; transition: width .3s, background .3s; }
+
+  #info { text-align:right; font-size:13px; line-height:1.6; }
+  #info b { color:#7CFC00; }
+
+  /* Кнопки внизу */
+  #bottom-bar {
+    position:fixed; bottom:15px; left:50%; transform:translateX(-50%);
+    display:flex; gap:10px; z-index:50;
+  }
+  .btn {
+    background: linear-gradient(180deg,#3498db,#2980b9);
+    border:2px solid #5dade2; color:#fff; padding:10px 18px; border-radius:8px;
+    cursor:pointer; font-size:14px; font-weight:bold; letter-spacing:1px;
+    transition: transform .15s, box-shadow .15s;
+    box-shadow: 0 4px 0 #1a5276;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #1a5276; }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #1a5276; }
+  .btn.green { background: linear-gradient(180deg,#2ecc71,#27ae60); border-color:#7CFC00; box-shadow: 0 4px 0 #145a32; }
+  .btn.red { background: linear-gradient(180deg,#e74c3c,#c0392b); border-color:#f1948a; box-shadow: 0 4px 0 #78281f; }
+
+  /* Модальные окна */
+  .modal {
+    position:fixed; inset:0; background: rgba(0,10,30,.85); backdrop-filter: blur(5px);
+    display:none; align-items:center; justify-content:center; z-index:100;
+  }
+  .modal.active { display:flex; }
+  .modal-content {
+    background: linear-gradient(160deg,#0c2461,#1e3799);
+    border:2px solid #4ab0ff; border-radius:15px; padding:25px;
+    width: 90%; max-width: 900px; max-height: 90vh; overflow-y:auto;
+    box-shadow: 0 0 60px rgba(74,176,255,.5);
+  }
+  .modal h2 { color:#7CFC00; margin-bottom:15px; text-align:center; letter-spacing:2px; }
+
+  /* CAS — редактор */
+  .cas-grid { display:grid; grid-template-columns: 1fr 1fr; gap:20px; }
+  .cas-section { background: rgba(0,0,0,.3); padding:15px; border-radius:10px; }
+  .cas-section h3 { color:#5dade2; margin-bottom:10px; border-bottom:1px solid #4ab0ff; padding-bottom:5px; }
+  .cas-row { margin-bottom:12px; }
+  .cas-row label { display:block; margin-bottom:5px; font-size:13px; opacity:.9; }
+  .color-row { display:flex; gap:6px; flex-wrap:wrap; }
+  .color-swatch {
+    width:32px; height:32px; border-radius:50%; cursor:pointer;
+    border:3px solid transparent; transition: transform .15s;
+  }
+  .color-swatch:hover { transform:scale(1.15); }
+  .color-swatch.active { border-color:#7CFC00; box-shadow: 0 0 15px #7CFC00; }
+  .option-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .opt-btn {
+    background:#1a5276; border:2px solid #2874a6; color:#fff; padding:6px 12px;
+    border-radius:6px; cursor:pointer; font-size:13px;
+  }
+  .opt-btn.active { background:#2ecc71; border-color:#7CFC00; }
+  .cas-row input[type=range] { width:100%; }
+  .cas-row input[type=text] {
+    width:100%; padding:8px; background:#0a1929; border:1px solid #4ab0ff;
+    color:#fff; border-radius:6px; font-size:14px;
+  }
+  .cas-actions { grid-column: 1/-1; display:flex; justify-content:center; gap:15px; margin-top:10px; }
+
+  /* Подсказка управления */
+  #controls-hint {
+    position:fixed; bottom:80px; left:15px; font-size:12px; opacity:.7;
+    background: rgba(0,0,0,.5); padding:8px 12px; border-radius:8px;
+    z-index:40;
+  }
+
+  /* Действия */
+  #actions-menu {
+    position:fixed; right:15px; bottom:80px; display:flex; flex-direction:column; gap:8px;
+    z-index:50;
+  }
+  .action-btn {
+    background: rgba(46,204,113,.9); border:2px solid #7CFC00; color:#fff;
+    padding:10px 14px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:bold;
+    min-width:160px; text-align:left; display:none;
+  }
+  .action-btn.show { display:block; }
+
+  /* Speech bubble */
+  #speech {
+    position:fixed; left:50%; top:30%; transform:translateX(-50%);
+    background:#fff; color:#000; padding:10px 20px; border-radius:20px;
+    font-size:16px; font-weight:bold; display:none; z-index:60;
+    box-shadow: 0 5px 20px rgba(0,0,0,.5);
+  }
+  #speech::after {
+    content:''; position:absolute; bottom:-10px; left:50%; transform:translateX(-50%);
+    border:10px solid transparent; border-top-color:#fff;
+  }
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <h1>THE SIMS 4</h1>
+  <div class="plumb-anim"></div>
+  <p>Web Edition · Загрузка мира...</p>
+</div>
+
+<div id="hud" style="display:none;">
+  <div class="panel" id="needs">
+    <div class="need"><span class="need-label">Голод</span><div class="bar"><div id="bar-hunger"></div></div></div>
+    <div class="need"><span class="need-label">Энергия</span><div class="bar"><div id="bar-energy"></div></div></div>
+    <div class="need"><span class="need-label">Веселье</span><div class="bar"><div id="bar-fun"></div></div></div>
+    <div class="need"><span class="need-label">Гигиена</span><div class="bar"><div id="bar-hygiene"></div></div></div>
+    <div class="need"><span class="need-label">Соцализация</span><div class="bar"><div id="bar-social"></div></div></div>
+  </div>
+  <div class="panel" id="info">
+    <div>Сим: <b id="sim-name">Сим</b></div>
+    <div>Локация: <b id="location">Город</b></div>
+    <div>Симолеоны: §<b id="money">2000</b></div>
+    <div>Время: <b id="time">12:00</b></div>
+  </div>
+</div>
+
+<div id="speech"></div>
+
+<div id="controls-hint" style="display:none;">
+  WASD — движение · Мышь — камера · E — действие · C — редактор · H — дом/город
+</div>
+
+<div id="actions-menu"></div>
+
+<div id="bottom-bar" style="display:none;">
+  <button class="btn green" onclick="openCAS()">👤 Редактор персонажа</button>
+  <button class="btn" onclick="toggleLocation()">🏠 Дом / 🏙 Город</button>
+  <button class="btn" onclick="quickAction('eat')">🍔 Поесть</button>
+  <button class="btn" onclick="quickAction('sleep')">😴 Спать</button>
+  <button class="btn red" onclick="quickAction('shower')">🚿 Душ</button>
+</div>
+
+<!-- CAS МОДАЛКА -->
+<div class="modal" id="cas-modal">
+  <div class="modal-content">
+    <h2>✦ CREATE A SIM ✦</h2>
+    <div class="cas-grid">
+
+      <div class="cas-section">
+        <h3>📝 Имя</h3>
+        <div class="cas-row">
+          <input type="text" id="input-name" value="Алекс" maxlength="20"/>
+        </div>
+        <h3>⚧ Пол</h3>
+        <div class="cas-row option-row" id="opt-gender">
+          <button class="opt-btn active" data-val="female">Женский</button>
+          <button class="opt-btn" data-val="male">Мужской</button>
+        </div>
+        <h3>🎨 Цвет кожи</h3>
+        <div class="cas-row color-row" id="opt-skin"></div>
+        <h3>💇 Причёска</h3>
+        <div class="cas-row option-row" id="opt-hair">
+          <button class="opt-btn active" data-val="long">Длинные</button>
+          <button class="opt-btn" data-val="short">Короткие</button>
+          <button class="opt-btn" data-val="bun">Пучок</button>
+          <button class="opt-btn" data-val="bald">Лысый</button>
+        </div>
+        <h3>🌈 Цвет волос</h3>
+        <div class="cas-row color-row" id="opt-hair-color"></div>
+      </div>
+
+      <div class="cas-section">
+        <h3>👁 Цвет глаз</h3>
+        <div class="cas-row color-row" id="opt-eyes"></div>
+
+        <h3>📏 Рост / Телосложение</h3>
+        <div class="cas-row">
+          <label>Рост: <span id="height-val">1.0</span></label>
+          <input type="range" id="opt-height" min="0.85" max="1.15" step="0.01" value="1.0"/>
+        </div>
+        <div class="cas-row">
+          <label>Полнота: <span id="weight-val">1.0</span></label>
+          <input type="range" id="opt-weight" min="0.8" max="1.4" step="0.01" value="1.0"/>
+        </div>
+
+        <h3>👕 Верх</h3>
+        <div class="cas-row color-row" id="opt-shirt"></div>
+
+        <h3>👖 Низ</h3>
+        <div class="cas-row color-row" id="opt-pants"></div>
+
+        <h3>👟 Обувь</h3>
+        <div class="cas-row color-row" id="opt-shoes"></div>
+
+        <h3>✨ Стиль одежды</h3>
+        <div class="cas-row option-row" id="opt-style">
+          <button class="opt-btn active" data-val="casual">Повседневный</button>
+          <button class="opt-btn" data-val="formal">Деловой</button>
+          <button class="opt-btn" data-val="sport">Спортивный</button>
+          <button class="opt-btn" data-val="party">Вечерний</button>
+        </div>
+      </div>
+
+      <div class="cas-actions">
+        <button class="btn green" onclick="applyCAS()">✓ Принять</button>
+        <button class="btn" onclick="randomCAS()">🎲 Случайно</button>
+        <button class="btn red" onclick="closeCAS()">✕ Закрыть</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================
+// ГЛОБАЛЬНОЕ СОСТОЯНИЕ
+// ============================================================
+const state = {
+  sim: {
+    name: 'Алекс',
+    gender: 'female',
+    skinColor: '#f4c2a1',
+    hairStyle: 'long',
+    hairColor: '#3a1f0a',
+    eyeColor: '#3498db',
+    height: 1.0,
+    weight: 1.0,
+    shirtColor: '#e91e63',
+    pantsColor: '#2c3e50',
+    shoesColor: '#1a1a1a',
+    style: 'casual',
+  },
+  needs: { hunger: 80, energy: 80, fun: 70, hygiene: 90, social: 60 },
+  money: 2000,
+  location: 'city', // 'city' | 'home'
+  time: 12 * 60, // minutes from midnight
+};
+
+const PALETTES = {
+  skin: ['#fde0c5','#f4c2a1','#e0a87b','#c68a5b','#9b6b3f','#6e4324','#3d2817'],
+  hair: ['#0a0a0a','#3a1f0a','#6e4324','#a87644','#d4a574','#e8c89a','#ff4500','#9b59b6','#3498db','#e91e63','#7CFC00','#ffffff'],
+  eyes: ['#3498db','#27ae60','#8b4513','#2c1810','#7d3c98','#16a085','#e67e22','#aab7b8'],
+  cloth:['#e91e63','#9b59b6','#3498db','#1abc9c','#f39c12','#e74c3c','#2ecc71','#34495e','#ecf0f1','#000000','#8b4513','#ff6b9d','#7CFC00','#ffd700'],
+};
+
+// ============================================================
+// THREE.JS СЦЕНА
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 30, 100);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 500);
+camera.position.set(0, 5, 10);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// Освещение
+const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xfff5d6, 1.1);
+sun.position.set(20, 30, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left = -40; sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40; sun.shadow.camera.bottom = -40;
+scene.add(sun);
+
+// ============================================================
+// СОЗДАНИЕ СИМА (персонажа)
+// ============================================================
+function createSim() {
+  const group = new THREE.Group();
+  const s = state.sim;
+
+  // Материалы
+  const skinMat = new THREE.MeshStandardMaterial({ color: s.skinColor, roughness:.7 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: s.hairColor, roughness:.4 });
+  const shirtMat = new THREE.MeshStandardMaterial({ color: s.shirtColor, roughness:.6 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: s.pantsColor, roughness:.6 });
+  const shoesMat = new THREE.MeshStandardMaterial({ color: s.shoesColor, roughness:.4 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: s.eyeColor, emissive: s.eyeColor, emissiveIntensity: .2 });
+
+  const h = s.height;
+  const w = s.weight;
+
+  // Ноги
+  const legGeo = new THREE.CylinderGeometry(0.13*w, 0.15*w, 0.9*h, 12);
+  const legL = new THREE.Mesh(legGeo, pantsMat); legL.position.set(-0.15, 0.45*h, 0); legL.castShadow=true;
+  const legR = new THREE.Mesh(legGeo, pantsMat); legR.position.set(0.15, 0.45*h, 0); legR.castShadow=true;
+  group.add(legL, legR);
+  group.userData.legL = legL; group.userData.legR = legR;
+
+  // Обувь
+  const shoeGeo = new THREE.BoxGeometry(0.22, 0.1, 0.35);
+  const shoeL = new THREE.Mesh(shoeGeo, shoesMat); shoeL.position.set(-0.15, 0.05, 0.05); shoeL.castShadow=true;
+  const shoeR = new THREE.Mesh(shoeGeo, shoesMat); shoeR.position.set(0.15, 0.05, 0.05); shoeR.castShadow=true;
+  group.add(shoeL, shoeR);
+
+  // Торс
+  const torsoGeo = new THREE.CylinderGeometry(0.28*w, 0.3*w, 0.7*h, 12);
+  const torso = new THREE.Mesh(torsoGeo, shirtMat); torso.position.y = 1.25*h; torso.castShadow=true;
+  group.add(torso);
+
+  // Руки
+  const armGeo = new THREE.CylinderGeometry(0.08*w, 0.09*w, 0.65*h, 10);
+  const armL = new THREE.Mesh(armGeo, shirtMat); armL.position.set(-0.4*w, 1.3*h, 0); armL.castShadow=true;
+  const armR = new THREE.Mesh(armGeo, shirtMat); armR.position.set(0.4*w, 1.3*h, 0); armR.castShadow=true;
+  group.add(armL, armR);
+  group.userData.armL = armL; group.userData.armR = armR;
+
+  // Кисти
+  const handGeo = new THREE.SphereGeometry(0.1*w, 10, 10);
+  const handL = new THREE.Mesh(handGeo, skinMat); handL.position.set(-0.4*w, 0.95*h, 0);
+  const handR = new THREE.Mesh(handGeo, skinMat); handR.position.set(0.4*w, 0.95*h, 0);
+  group.add(handL, handR);
+
+  // Шея
+  const neckGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.15, 10);
+  const neck = new THREE.Mesh(neckGeo, skinMat); neck.position.y = 1.68*h;
+  group.add(neck);
+
+  // Голова
+  const headGeo = new THREE.SphereGeometry(0.25, 16, 16);
+  const head = new THREE.Mesh(headGeo, skinMat); head.position.y = 1.95*h; head.castShadow=true;
+  group.add(head);
+
+  // Глаза
+  const eyeGeo = new THREE.SphereGeometry(0.04, 8, 8);
+  const eyeL = new THREE.Mesh(eyeGeo, eyeMat); eyeL.position.set(-0.08, 1.97*h, 0.21);
+  const eyeR = new THREE.Mesh(eyeGeo, eyeMat); eyeR.position.set(0.08, 1.97*h, 0.21);
+  group.add(eyeL, eyeR);
+
+  // Рот
+  const mouthGeo = new THREE.BoxGeometry(0.08, 0.015, 0.01);
+  const mouthMat = new THREE.MeshStandardMaterial({ color:0x8b3a3a });
+  const mouth = new THREE.Mesh(mouthGeo, mouthMat); mouth.position.set(0,1.88*h,0.24);
+  group.add(mouth);
+
+  // Волосы
+  if (s.hairStyle !== 'bald') {
+    let hairMesh;
+    if (s.hairStyle === 'long') {
+      const g = new THREE.SphereGeometry(0.28, 16, 16, 0, Math.PI*2, 0, Math.PI*0.7);
+      hairMesh = new THREE.Mesh(g, hairMat);
+      hairMesh.position.y = 2.0*h;
+      // Волны на спине
+      const back = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.18,0.5,12), hairMat);
+      back.position.set(0, 1.7*h, -0.15);
+      group.add(back);
+    } else if (s.hairStyle === 'short') {
+      const g = new THREE.SphereGeometry(0.27, 16, 16, 0, Math.PI*2, 0, Math.PI*0.55);
+      hairMesh = new THREE.Mesh(g, hairMat);
+      hairMesh.position.y = 2.0*h;
+    } else if (s.hairStyle === 'bun') {
+      const g = new THREE.SphereGeometry(0.27, 16, 16, 0, Math.PI*2, 0, Math.PI*0.55);
+      hairMesh = new THREE.Mesh(g, hairMat);
+      hairMesh.position.y = 2.0*h;
+      const bun = new THREE.Mesh(new THREE.SphereGeometry(0.13,12,12), hairMat);
+      bun.position.set(0,2.18*h,-0.15);
+      group.add(bun);
+    }
+    if (hairMesh) { hairMesh.castShadow=true; group.add(hairMesh); }
+  }
+
+  // ✦ ПЛЮМБОБ ✦ — зелёный кристалл над головой
+  const plumbobGroup = new THREE.Group();
+  const plumbobGeo = new THREE.OctahedronGeometry(0.18, 0);
+  // Сжимаем по горизонтали, чтобы получился ромб как в Sims
+  plumbobGeo.scale(1, 1.6, 1);
+  const plumbobMat = new THREE.MeshStandardMaterial({
+    color: 0x7CFC00,
+    emissive: 0x2ecc71,
+    emissiveIntensity: 1.2,
+    metalness: 0.3,
+    roughness: 0.1,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const plumbob = new THREE.Mesh(plumbobGeo, plumbobMat);
+  plumbobGroup.add(plumbob);
+
+  // Свечение вокруг плюмбоба
+  const plumbobLight = new THREE.PointLight(0x7CFC00, 1.5, 4);
+  plumbobLight.position.y = 0;
+  plumbobGroup.add(plumbobLight);
+
+  plumbobGroup.position.y = 2.45*h;
+  group.add(plumbobGroup);
+  group.userData.plumbob = plumbobGroup;
+
+  return group;
+}
+
+let sim = createSim();
+scene.add(sim);
+
+function rebuildSim() {
+  const pos = sim.position.clone();
+  const rot = sim.rotation.clone();
+  scene.remove(sim);
+  sim = createSim();
+  sim.position.copy(pos);
+  sim.rotation.copy(rot);
+  scene.add(sim);
+}
+
+// ============================================================
+// СОЗДАНИЕ ГОРОДА
+// ============================================================
+const cityGroup = new THREE.Group();
+scene.add(cityGroup);
+
+function buildCity() {
+  // Земля
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(200,200),
+    new THREE.MeshStandardMaterial({ color: 0x4a7c3f })
+  );
+  ground.rotation.x = -Math.PI/2;
+  ground.receiveShadow = true;
+  cityGroup.add(ground);
+
+  // Дороги (крест)
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+  const roadH = new THREE.Mesh(new THREE.PlaneGeometry(200,8), roadMat);
+  roadH.rotation.x = -Math.PI/2; roadH.position.y = 0.01;
+  cityGroup.add(roadH);
+  const roadV = new THREE.Mesh(new THREE.PlaneGeometry(8,200), roadMat);
+  roadV.rotation.x = -Math.PI/2; roadV.position.y = 0.01;
+  cityGroup.add(roadV);
+
+  // Разметка
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  for (let i=-95; i<=95; i+=10) {
+    const s1 = new THREE.Mesh(new THREE.PlaneGeometry(4,0.3), stripeMat);
+    s1.rotation.x = -Math.PI/2; s1.position.set(i,0.02,0); cityGroup.add(s1);
+    const s2 = new THREE.Mesh(new THREE.PlaneGeometry(0.3,4), stripeMat);
+    s2.rotation.x = -Math.PI/2; s2.position.set(0,0.02,i); cityGroup.add(s2);
+  }
+
+  // Здания
+  const buildings = [
+    { x:-25, z:-25, w:14, h:18, d:14, color:0xe74c3c },
+    { x: 25, z:-25, w:12, h:25, d:12, color:0x3498db },
+    { x:-25, z: 25, w:16, h:14, d:14, color:0xf39c12 },
+    { x: 25, z: 25, w:12, h:22, d:12, color:0x9b59b6 },
+    { x:-50, z:-15, w:10, h:30, d:10, color:0x16a085 },
+    { x: 50, z: 15, w:14, h:20, d:14, color:0xd35400 },
+    { x:-50, z: 40, w:12, h:16, d:12, color:0x2c3e50 },
+    { x: 50, z:-50, w:18, h:12, d:14, color:0xc0392b },
+  ];
+
+  buildings.forEach(b => {
+    const building = new THREE.Mesh(
+      new THREE.BoxGeometry(b.w, b.h, b.d),
+      new THREE.MeshStandardMaterial({ color: b.color })
+    );
+    building.position.set(b.x, b.h/2, b.z);
+    building.castShadow = true;
+    building.receiveShadow = true;
+    cityGroup.add(building);
+
+    // Окна
+    const winMat = new THREE.MeshStandardMaterial({
+      color: 0xffeb3b, emissive: 0xffeb3b, emissiveIntensity: 0.3
+    });
+    const cols = Math.floor(b.w/2.5);
+    const rows = Math.floor(b.h/3);
+    for (let r=0; r<rows; r++) {
+      for (let c=0; c<cols; c++) {
+        if (Math.random() > 0.3) {
+          const win = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.2), winMat);
+          win.position.set(
+            b.x - b.w/2 + 1.25 + c*2.5,
+            1.5 + r*3,
+            b.z + b.d/2 + 0.01
+          );
+          cityGroup.add(win);
+          const win2 = win.clone();
+          win2.position.z = b.z - b.d/2 - 0.01;
+          win2.rotation.y = Math.PI;
+          cityGroup.add(win2);
+        }
+      }
+    }
+  });
+
+  // Деревья
+  for (let i=0; i<25; i++) {
+    const x = (Math.random()-0.5)*180;
+    const z = (Math.random()-0.5)*180;
+    if (Math.abs(x) < 6 || Math.abs(z) < 6) continue;
+    // Не накладывать на здания
+    const tooClose = buildings.some(b =>
+      Math.abs(x-b.x) < b.w/2+2 && Math.abs(z-b.z) < b.d/2+2
+    );
+    if (tooClose) continue;
+
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3,0.4,2,8),
+      new THREE.MeshStandardMaterial({ color: 0x5d4037 })
+    );
+    trunk.position.set(x, 1, z);
+    trunk.castShadow = true;
+    cityGroup.add(trunk);
+
+    const leaves = new THREE.Mesh(
+      new THREE.SphereGeometry(1.5, 10, 10),
+      new THREE.MeshStandardMaterial({ color: 0x2d8f3f })
+    );
+    leaves.position.set(x, 3, z);
+    leaves.castShadow = true;
+    cityGroup.add(leaves);
+  }
+
+  // Уличные фонари
+  for (let i=-90; i<=90; i+=20) {
+    [{x:i,z:6},{x:i,z:-6},{x:6,z:i},{x:-6,z:i}].forEach(p=>{
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1,0.1,4,8),
+        new THREE.MeshStandardMaterial({ color: 0x222 })
+      );
+      pole.position.set(p.x,2,p.z);
+      cityGroup.add(pole);
+      const lamp = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25,10,10),
+        new THREE.MeshStandardMaterial({ color:0xffeb3b, emissive:0xffeb3b, emissiveIntensity:0.6 })
+      );
+      lamp.position.set(p.x,4,p.z);
+      cityGroup.add(lamp);
+    });
+  }
+
+  // Парк-фонтан в центре
+  const fountainBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(3,3,0.4,24),
+    new THREE.MeshStandardMaterial({ color: 0x95a5a6 })
+  );
+  fountainBase.position.set(15, 0.2, 15);
+  cityGroup.add(fountainBase);
+  const water = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.7,2.7,0.2,24),
+    new THREE.MeshStandardMaterial({ color: 0x3498db, transparent:true, opacity:0.7 })
+  );
+  water.position.set(15, 0.5, 15);
+  cityGroup.add(water);
+}
+buildCity();
+
+// ============================================================
+// СОЗДАНИЕ ДОМА (интерьер)
+// ============================================================
+const homeGroup = new THREE.Group();
+homeGroup.visible = false;
+scene.add(homeGroup);
+
+const interactables = []; // объекты для взаимодействия
+
+function buildHome() {
+  // Пол
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 20),
+    new THREE.MeshStandardMaterial({ color: 0xc8a165 })
+  );
+  floor.rotation.x = -Math.PI/2;
+  floor.receiveShadow = true;
+  homeGroup.add(floor);
+
+  // Стены (4 стены, открытый верх)
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xfdf5e6, side: THREE.DoubleSide });
+  const wallH = 4;
+  const walls = [
+    { w:20, h:wallH, d:0.2, x:0, z:-10 },
+    { w:20, h:wallH, d:0.2, x:0, z:10 },
+    { w:0.2, h:wallH, d:20, x:-10, z:0 },
+    { w:0.2, h:wallH, d:20, x:10, z:0 },
+  ];
+  walls.forEach(w=>{
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w.w,w.h,w.d), wallMat);
+    wall.position.set(w.x, w.h/2, w.z);
+    wall.receiveShadow = true;
+    homeGroup.add(wall);
+  });
+
+  // Кровать
+  const bedFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 0.4, 3.5),
+    new THREE.MeshStandardMaterial({ color: 0x6d4c41 })
+  );
+  bedFrame.position.set(-7, 0.2, -7);
+  bedFrame.castShadow = true;
+  homeGroup.add(bedFrame);
+  const mattress = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 0.3, 3.3),
+    new THREE.MeshStandardMaterial({ color: 0xff6b9d })
+  );
+  mattress.position.set(-7, 0.55, -7);
+  homeGroup.add(mattress);
+  const pillow = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 0.2, 0.6),
+    new THREE.MeshStandardMaterial({ color: 0xffffff })
+  );
+  pillow.position.set(-7, 0.8, -8.2);
+  homeGroup.add(pillow);
+  bedFrame.userData = { type:'bed', name:'Кровать', action:'sleep' };
+  interactables.push(bedFrame);
+
+  // Холодильник
+  const fridge = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5, 2.5, 1.5),
+    new THREE.MeshStandardMaterial({ color: 0xecf0f1 })
+  );
+  fridge.position.set(8, 1.25, -8);
+  fridge.castShadow = true;
+  homeGroup.add(fridge);
+  fridge.userData = { type:'fridge', name:'Холодильник', action:'eat' };
+  interactables.push(fridge);
+
+  // Плита
+  const stove = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5, 1, 1.5),
+    new THREE.MeshStandardMaterial({ color: 0x7f8c8d })
+  );
+  stove.position.set(8, 0.5, -5.5);
+  stove.castShadow = true;
+  homeGroup.add(stove);
+  stove.userData = { type:'stove', name:'Плита', action:'cook' };
+  interactables.push(stove);
+
+  // Стол + стулья
+  const table = new THREE.Mesh(
+    new THREE.BoxGeometry(2.5, 0.15, 1.5),
+    new THREE.MeshStandardMaterial({ color: 0x8d6e63 })
+  );
+  table.position.set(3, 0.85, -5);
+  table.castShadow = true;
+  homeGroup.add(table);
+  for (let i=0;i<4;i++){
+    const leg = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1,0.85,0.1),
+      new THREE.MeshStandardMaterial({color:0x6d4c41})
+    );
+    leg.position.set(3 + (i%2?1.1:-1.1), 0.42, -5 + (i<2?0.6:-0.6));
+    homeGroup.add(leg);
+  }
+
+  // Диван
+  const sofa = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 0.6, 1.5),
+    new THREE.MeshStandardMaterial({ color: 0x3498db })
+  );
+  sofa.position.set(0, 0.5, 7);
+  sofa.castShadow = true;
+  homeGroup.add(sofa);
+  const sofaBack = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 1, 0.4),
+    new THREE.MeshStandardMaterial({ color: 0x2980b9 })
+  );
+  sofaBack.position.set(0, 1, 7.6);
+  homeGroup.add(sofaBack);
+  sofa.userData = { type:'sofa', name:'Диван', action:'rest' };
+  interactables.push(sofa);
+
+  // Телевизор
+  const tvStand = new THREE.Mesh(
+    new THREE.BoxGeometry(3, 0.5, 0.6),
+    new THREE.MeshStandardMaterial({ color: 0x34495e })
+  );
+  tvStand.position.set(0, 0.25, -9);
+  homeGroup.add(tvStand);
+  const tv = new THREE.Mesh(
+    new THREE.BoxGeometry(3, 1.8, 0.2),
+    new THREE.MeshStandardMaterial({ color: 0x000000 })
+  );
+  tv.position.set(0, 1.5, -9.3);
+  homeGroup.add(tv);
+  const tvScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.7, 1.6),
+    new THREE.MeshStandardMaterial({ color: 0x4ab0ff, emissive: 0x4ab0ff, emissiveIntensity: 0.5 })
+  );
+  tvScreen.position.set(0, 1.5, -9.18);
+  homeGroup.add(tvScreen);
+  tv.userData = { type:'tv', name:'Телевизор', action:'watch' };
+  interactables.push(tv);
+
+  // Душ
+  const showerBase = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5, 0.1, 1.5),
+    new THREE.MeshStandardMaterial({ color: 0xbdc3c7 })
+  );
+  showerBase.position.set(8, 0.05, 8);
+  homeGroup.add(showerBase);
+  const showerBox = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5, 2.2, 1.5),
+    new THREE.MeshStandardMaterial({ color: 0xaed6f1, transparent:true, opacity:0.4 })
+  );
+  showerBox.position.set(8, 1.1, 8);
+  homeGroup.add(showerBox);
+  showerBox.userData = { type:'shower', name:'Душ', action:'shower' };
+  interactables.push(showerBox);
+
+  // Туалет
+  const toilet = new THREE.Mesh(
+    new THREE.BoxGeometry(0.7, 0.8, 0.8),
+    new THREE.MeshStandardMaterial({ color: 0xecf0f1 })
+  );
+  toilet.position.set(8, 0.4, 5);
+  homeGroup.add(toilet);
+  toilet.userData = { type:'toilet', name:'Унитаз', action:'toilet' };
+  interactables.push(toilet);
+
+  // Ковёр
+  const rug = new THREE.Mesh(
+    new THREE.PlaneGeometry(5, 4),
+    new THREE.MeshStandardMaterial({ color: 0xc0392b })
+  );
+  rug.rotation.x = -Math.PI/2;
+  rug.position.set(0, 0.02, 5);
+  homeGroup.add(rug);
+
+  // Растение
+  const plantPot = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4,0.3,0.5,12),
+    new THREE.MeshStandardMaterial({ color: 0x6d4c41 })
+  );
+  plantPot.position.set(-9, 0.25, 9);
+  homeGroup.add(plantPot);
+  const plantLeaves = new THREE.Mesh(
+    new THREE.SphereGeometry(0.7, 10, 10),
+    new THREE.MeshStandardMaterial({ color: 0x2ecc71 })
+  );
+  plantLeaves.position.set(-9, 1.1, 9);
+  homeGroup.add(plantLeaves);
+
+  // Лампа на столе
+  const lamp = new THREE.Mesh(
+    new THREE.ConeGeometry(0.3, 0.5, 12),
+    new THREE.MeshStandardMaterial({ color: 0xf39c12 })
+  );
+  lamp.position.set(3, 1.2, -5);
+  homeGroup.add(lamp);
+  const lampLight = new THREE.PointLight(0xfff5d6, 0.8, 8);
+  lampLight.position.set(3, 1.5, -5);
+  homeGroup.add(lampLight);
+}
+buildHome();
+
+// ============================================================
+// УПРАВЛЕНИЕ
+// ============================================================
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key.toLowerCase() === 'c') openCAS();
+  if (e.key.toLowerCase() === 'h') toggleLocation();
+  if (e.key.toLowerCase() === 'e') tryInteract();
+});
+addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+// Мышь — поворот камеры
+let camYaw = 0, camPitch = 0.3, camDistance = 8;
+let mouseDown = false, mouseX = 0, mouseY = 0;
+renderer.domElement.addEventListener('mousedown', e => {
+  mouseDown = true; mouseX = e.clientX; mouseY = e.clientY;
+});
+addEventListener('mouseup', () => mouseDown = false);
+addEventListener('mousemove', e => {
+  if (!mouseDown) return;
+  camYaw -= (e.clientX - mouseX) * 0.005;
+  camPitch -= (e.clientY - mouseY) * 0.005;
+  camPitch = Math.max(-0.3, Math.min(1.2, camPitch));
+  mouseX = e.clientX; mouseY = e.clientY;
+});
+renderer.domElement.addEventListener('wheel', e => {
+  camDistance += e.deltaY * 0.01;
+  camDistance = Math.max(3, Math.min(20, camDistance));
+});
+
+// ============================================================
+// ВЗАИМОДЕЙСТВИЕ
+// ============================================================
+let nearbyObject = null;
+function checkNearby() {
+  if (state.location !== 'home') { nearbyObject = null; updateActionsMenu(); return; }
+  let closest = null, minDist = 2.5;
+  interactables.forEach(obj => {
+    const d = sim.position.distanceTo(obj.position);
+    if (d < minDist) { minDist = d; closest = obj; }
+  });
+  if (closest !== nearbyObject) {
+    nearbyObject = closest;
+    updateActionsMenu();
+  }
+}
+
+function updateActionsMenu() {
+  const menu = document.getElementById('actions-menu');
+  menu.innerHTML = '';
+  if (nearbyObject) {
+    const btn = document.createElement('button');
+    btn.className = 'action-btn show';
+    btn.textContent = `[E] ${getActionLabel(nearbyObject.userData.action)} → ${nearbyObject.userData.name}`;
+    btn.onclick = tryInteract;
+    menu.appendChild(btn);
+  }
+}
+
+function getActionLabel(act) {
+  return ({
+    sleep:'Поспать', eat:'Поесть', cook:'Готовить',
+    rest:'Отдохнуть', watch:'Смотреть ТВ',
+    shower:'Принять душ', toilet:'В туалет'
+  })[act] || act;
+}
+
+function tryInteract() {
+  if (!nearbyObject) return;
+  performAction(nearbyObject.userData.action, nearbyObject.userData.name);
+}
+
+function performAction(act, target='') {
+  const n = state.needs;
+  let msg = '';
+  switch(act) {
+    case 'sleep':   n.energy = Math.min(100, n.energy + 50); msg = 'Zzz... Сон восстанавливает энергию'; break;
+    case 'eat':     n.hunger = Math.min(100, n.hunger + 40); state.money -= 10; msg = 'Ням-ням! Голод утолён'; break;
+    case 'cook':    n.hunger = Math.min(100, n.hunger + 50); n.fun += 5; msg = 'Приготовлено вкусное блюдо'; break;
+    case 'rest':    n.energy = Math.min(100, n.energy + 15); n.fun += 10; msg = 'Расслабляюсь на диване'; break;
+    case 'watch':   n.fun = Math.min(100, n.fun + 30); n.energy -= 3; msg = 'Любимое шоу! Так весело'; break;
+    case 'shower':  n.hygiene = Math.min(100, n.hygiene + 60); msg = 'Освежающе чистый!'; break;
+    case 'toilet':  n.hygiene = Math.min(100, n.hygiene + 5); msg = 'Уф, полегчало'; break;
+  }
+  showSpeech(msg);
+}
+
+function quickAction(act) {
+  performAction(act);
+}
+
+function showSpeech(text) {
+  const s = document.getElementById('speech');
+  s.textContent = text;
+  s.style.display = 'block';
+  clearTimeout(s._t);
+  s._t = setTimeout(()=> s.style.display = 'none', 2500);
+}
+
+// ============================================================
+// ИГРОВОЙ ЦИКЛ
+// ============================================================
+let lastTime = performance.now();
+const moveDir = new THREE.Vector3();
+let walkAnim = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+
+  // Движение
+  moveDir.set(0,0,0);
+  if (keys['w']) moveDir.z -= 1;
+  if (keys['s']) moveDir.z += 1;
+  if (keys['a']) moveDir.x -= 1;
+  if (keys['d']) moveDir.x += 1;
+
+  if (moveDir.length() > 0) {
+    moveDir.normalize();
+    // Поворачиваем по yaw камеры
+    moveDir.applyAxisAngle(new THREE.Vector3(0,1,0), camYaw);
+    const speed = 4;
+    sim.position.x += moveDir.x * speed * dt;
+    sim.position.z += moveDir.z * speed * dt;
+    sim.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+    walkAnim += dt * 8;
+
+    // Анимация ходьбы
+    if (sim.userData.legL) {
+      sim.userData.legL.rotation.x = Math.sin(walkAnim) * 0.5;
+      sim.userData.legR.rotation.x = -Math.sin(walkAnim) * 0.5;
+      sim.userData.armL.rotation.x = -Math.sin(walkAnim) * 0.4;
+      sim.userData.armR.rotation.x = Math.sin(walkAnim) * 0.4;
+    }
+  } else {
+    if (sim.userData.legL) {
+      sim.userData.legL.rotation.x *= 0.85;
+      sim.userData.legR.rotation.x *= 0.85;
+      sim.userData.armL.rotation.x *= 0.85;
+      sim.userData.armR.rotation.x *= 0.85;
+    }
+  }
+
+  // Ограничение по карте
+  if (state.location === 'home') {
+    sim.position.x = Math.max(-9.5, Math.min(9.5, sim.position.x));
+    sim.position.z = Math.max(-9.5, Math.min(9.5, sim.position.z));
+  } else {
+    sim.position.x = Math.max(-95, Math.min(95, sim.position.x));
+    sim.position.z = Math.max(-95, Math.min(95, sim.position.z));
+  }
+
+  // Плюмбоб — вращение и качание
+  if (sim.userData.plumbob) {
+    sim.userData.plumbob.rotation.y += dt * 2;
+    sim.userData.plumbob.position.y = 2.45 * state.sim.height + Math.sin(now*0.003) * 0.08;
+  }
+
+  // Камера от 3-го лица
+  const camOffset = new THREE.Vector3(
+    Math.sin(camYaw) * Math.cos(camPitch) * camDistance,
+    Math.sin(camPitch) * camDistance + 1.5,
+    Math.cos(camYaw) * Math.cos(camPitch) * camDistance
+  );
+  camera.position.copy(sim.position).add(camOffset);
+  camera.lookAt(sim.position.x, sim.position.y + 1.5, sim.position.z);
+
+  // Спад потребностей
+  state.needs.hunger  = Math.max(0, state.needs.hunger  - dt * 0.8);
+  state.needs.energy  = Math.max(0, state.needs.energy  - dt * 0.5);
+  state.needs.fun     = Math.max(0, state.needs.fun     - dt * 0.6);
+  state.needs.hygiene = Math.max(0, state.needs.hygiene - dt * 0.4);
+  state.needs.social  = Math.max(0, state.needs.social  - dt * 0.3);
+
+  // Время
+  state.time += dt * 30;
+  if (state.time >= 24*60) state.time -= 24*60;
+
+  checkNearby();
+  updateHUD();
+
+  renderer.render(scene, camera);
+}
+
+function updateHUD() {
+  const colorize = v => v > 60 ? '#2ecc71' : v > 30 ? '#f39c12' : '#e74c3c';
+  ['hunger','energy','fun','hygiene','social'].forEach(k => {
+    const bar = document.getElementById('bar-'+k);
+    bar.style.width = state.needs[k] + '%';
+    bar.style.background = colorize(state.needs[k]);
+  });
+  document.getElementById('sim-name').textContent = state.sim.name;
+  document.getElementById('location').textContent = state.location === 'home' ? 'Дом' : 'Город';
+  document.getElementById('money').textContent = Math.floor(state.money);
+  const h = Math.floor(state.time/60);
+  const m = Math.floor(state.time%60);
+  document.getElementById('time').textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+// ============================================================
+// ИНТЕРФЕЙС CAS
+// ============================================================
+function buildCASUI() {
+  // Цвета кожи
+  const skinRow = document.getElementById('opt-skin');
+  PALETTES.skin.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch' + (c === state.sim.skinColor ? ' active' : '');
+    sw.style.background = c;
+    sw.dataset.val = c;
+    sw.onclick = () => selectSwatch(skinRow, sw, 'skinColor', c);
+    skinRow.appendChild(sw);
+  });
+  // Волосы цвет
+  const hairColorRow = document.getElementById('opt-hair-color');
+  PALETTES.hair.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch' + (c === state.sim.hairColor ? ' active' : '');
+    sw.style.background = c;
+    sw.onclick = () => selectSwatch(hairColorRow, sw, 'hairColor', c);
+    hairColorRow.appendChild(sw);
+  });
+  // Глаза
+  const eyesRow = document.getElementById('opt-eyes');
+  PALETTES.eyes.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch' + (c === state.sim.eyeColor ? ' active' : '');
+    sw.style.background = c;
+    sw.onclick = () => selectSwatch(eyesRow, sw, 'eyeColor', c);
+    eyesRow.appendChild(sw);
+  });
+  // Одежда
+  ['shirt','pants','shoes'].forEach(part => {
+    const row = document.getElementById('opt-'+part);
+    PALETTES.cloth.forEach(c => {
+      const sw = document.createElement('div');
+      sw.className = 'color-swatch' + (c === state.sim[part+'Color'] ? ' active' : '');
+      sw.style.background = c;
+      sw.onclick = () => selectSwatch(row, sw, part+'Color', c);
+      row.appendChild(sw);
+    });
+  });
+
+  // Опции (gender, hair, style)
+  document.querySelectorAll('#opt-gender .opt-btn').forEach(btn => {
+    btn.onclick = () => selectOption('opt-gender','gender',btn);
+  });
+  document.querySelectorAll('#opt-hair .opt-btn').forEach(btn => {
+    btn.onclick = () => selectOption('opt-hair','hairStyle',btn);
+  });
+  document.querySelectorAll('#opt-style .opt-btn').forEach(btn => {
+    btn.onclick = () => selectOption('opt-style','style',btn);
+  });
+
+  // Слайдеры
+  document.getElementById('opt-height').oninput = e => {
+    state.sim.height = parseFloat(e.target.value);
+    document.getElementById('height-val').textContent = state.sim.height.toFixed(2);
+    rebuildSim();
+  };
+  document.getElementById('opt-weight').oninput = e => {
+    state.sim.weight = parseFloat(e.target.value);
+    document.getElementById('weight-val').textContent = state.sim.weight.toFixed(2);
+    rebuildSim();
+  };
+  document.getElementById('input-name').oninput = e => {
+    state.sim.name = e.target.value || 'Сим';
+  };
+}
+
+function selectSwatch(row, sw, prop, val) {
+  row.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('active'));
+  sw.classList.add('active');
+  state.sim[prop] = val;
+  rebuildSim();
+}
+
+function selectOption(rowId, prop, btn) {
+  document.querySelectorAll(`#${rowId} .opt-btn`).forEach(x => x.classList.remove('active'));
+  btn.classList.add('active');
+  state.sim[prop] = btn.dataset.val;
+  // Применить стиль одежды
+  if (prop === 'style') applyStyle(btn.dataset.val);
+  rebuildSim();
+}
+
+function applyStyle(s) {
+  const styles = {
+    casual: { shirt:'#3498db', pants:'#2c3e50', shoes:'#1a1a1a' },
+    formal: { shirt:'#ffffff', pants:'#000000', shoes:'#3a1f0a' },
+    sport:  { shirt:'#e74c3c', pants:'#2ecc71', shoes:'#ffffff' },
+    party:  { shirt:'#9b59b6', pants:'#1a1a1a', shoes:'#ffd700' },
+  };
+  const st = styles[s];
+  if (!st) return;
+  state.sim.shirtColor = st.shirt;
+  state.sim.pantsColor = st.pants;
+  state.sim.shoesColor = st.shoes;
+  // Обновить активные swatch'и
+  ['shirt','pants','shoes'].forEach(p => {
+    const row = document.getElementById('opt-'+p);
+    row.querySelectorAll('.color-swatch').forEach(sw => {
+      sw.classList.toggle('active', sw.style.background.includes(hexToRgb(st[p])) || sw.dataset.val === st[p]);
+    });
+  });
+}
+function hexToRgb(h){
+  const n = parseInt(h.replace('#',''),16);
+  return `rgb(${(n>>16)&255}, ${(n>>8)&255}, ${n&255})`;
+}
+
+window.openCAS = () => document.getElementById('cas-modal').classList.add('active');
+window.closeCAS = () => document.getElementById('cas-modal').classList.remove('active');
+window.applyCAS = () => { rebuildSim(); closeCAS(); showSpeech(`Привет, я ${state.sim.name}!`); };
+window.randomCAS = () => {
+  const rand = arr => arr[Math.floor(Math.random()*arr.length)];
+  state.sim.skinColor = rand(PALETTES.skin);
+  state.sim.hairColor = rand(PALETTES.hair);
+  state.sim.eyeColor  = rand(PALETTES.eyes);
+  state.sim.shirtColor= rand(PALETTES.cloth);
+  state.sim.pantsColor= rand(PALETTES.cloth);
+  state.sim.shoesColor= rand(PALETTES.cloth);
+  state.sim.hairStyle = rand(['long','short','bun','bald']);
+  state.sim.gender    = rand(['female','male']);
+  state.sim.height    = 0.85 + Math.random() * 0.3;
+  state.sim.weight    = 0.8 + Math.random() * 0.6;
+
+  // Обновить UI
+  refreshCASUI();
+  rebuildSim();
+};
+
+function refreshCASUI() {
+  // Перестраиваем swatches
+  ['opt-skin','opt-hair-color','opt-eyes','opt-shirt','opt-pants','opt-shoes'].forEach(id => {
+    document.getElementById(id).innerHTML = '';
+  });
+  buildCASUI();
+  document.getElementById('input-name').value = state.sim.name;
+  document.getElementById('opt-height').value = state.sim.height;
+  document.getElementById('opt-weight').value = state.sim.weight;
+  document.getElementById('height-val').textContent = state.sim.height.toFixed(2);
+  document.getElementById('weight-val').textContent = state.sim.weight.toFixed(2);
+  document.querySelectorAll('#opt-gender .opt-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === state.sim.gender);
+  });
+  document.querySelectorAll('#opt-hair .opt-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === state.sim.hairStyle);
+  });
+}
+
+window.toggleLocation = () => {
+  state.location = state.location === 'home' ? 'city' : 'home';
+  cityGroup.visible = state.location === 'city';
+  homeGroup.visible = state.location === 'home';
+  sim.position.set(0, 0, 0);
+  showSpeech(state.location === 'home' ? '🏠 Дома, милый дом!' : '🏙 Привет, город!');
+};
+
+// Resize
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ============================================================
+// СТАРТ
+// ============================================================
+buildCASUI();
+
+setTimeout(() => {
+  document.getElementById('loader').style.opacity = '0';
+  setTimeout(() => {
+    document.getElementById('loader').style.display = 'none';
+    document.getElementById('hud').style.display = 'flex';
+    document.getElementById('bottom-bar').style.display = 'flex';
+    document.getElementById('controls-hint').style.display = 'block';
+    showSpeech('Добро пожаловать в The Sims 4! Нажми C, чтобы создать сима');
+  }, 600);
+}, 1500);
+
+animate();
+</script>
+
+</body>
+</html>

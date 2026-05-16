@@ -56,7 +56,7 @@
   #title-bar b { color: #ffdf00; }
   #dialog {
     position: absolute;
-    bottom: 90px; left: 50%;
+    bottom: 50px; left: 50%;
     transform: translateX(-50%);
     background: rgba(10, 50, 25, .95);
     border: 4px solid #ffdf00;
@@ -87,47 +87,97 @@
     transition: transform 1.2s linear, opacity 1.2s linear;
   }
 
-  /* Action bar — horizontal row at the bottom-right, compact */
+  /* Action bar — vertical column of small round icon buttons on the right edge */
   #actions {
     position: absolute;
-    bottom: 20px; right: 20px;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 8px;
+    flex-direction: column;
+    gap: 10px;
     z-index: 6;
-    max-width: calc(100vw - 200px); /* leave room for joystick on the left */
   }
   .act-btn {
     background: rgba(10, 50, 25, .9);
     color: #fff;
     border: 2px solid #ffdf00;
-    border-radius: 40px;
-    padding: 8px 14px;
-    font-size: 13px;
+    border-radius: 50%;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    font-size: 22px;
     font-weight: bold;
     font-family: inherit;
     cursor: pointer;
-    min-width: 0;
-    white-space: nowrap;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     box-shadow: 0 3px 0 rgba(0,0,0,.4);
     transition: transform .08s, background .12s;
     touch-action: manipulation;
     -webkit-tap-highlight-color: rgba(255,223,0,.4);
+    position: relative;
   }
+  .act-btn::after {
+    content: attr(data-label);
+    position: absolute;
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0,0,0,.75);
+    color: #ffdf00;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s;
+  }
+  .act-btn:hover::after { opacity: 1; }
   .act-btn:active, .act-btn.pressed {
-    transform: translateY(2px);
-    box-shadow: 0 1px 0 rgba(0,0,0,.4);
+    transform: translateY(-50%) scale(.92);
     background: rgba(255,223,0, .85);
     color: #102015;
   }
-  .act-btn:disabled {
-    opacity: .35;
-    cursor: not-allowed;
+  .act-btn.active {
+    background: rgba(255,223,0, .85);
+    color: #102015;
   }
-  .act-btn .ico { margin-right: 6px; }
+  .act-btn .key-hint {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    background: #ffdf00;
+    color: #102015;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+    line-height: 18px;
+    text-align: center;
+    font-family: monospace;
+    border: 1px solid #102015;
+  }
+
+  #hint {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,40,20,.65);
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,223,0,.4);
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 4;
+    white-space: nowrap;
+  }
+  #hint b { color: #ffdf00; }
 
   #joystick {
     position: absolute;
@@ -194,10 +244,12 @@
     #hud { font-size: 12px; padding: 8px 10px; max-width: 220px; }
     #title-bar { font-size: 12px; }
     #dialog { font-size: 14px; padding: 12px 16px; bottom: 90px; }
-    .act-btn { padding: 8px 12px; font-size: 12px; }
-    #actions { bottom: 20px; right: 12px; gap: 6px; max-width: calc(100vw - 150px); }
+    .act-btn { width: 50px; height: 50px; font-size: 20px; }
+    .act-btn .key-hint { display: none; }
+    #actions { right: 8px; gap: 8px; }
     #joystick { width: 100px; height: 100px; bottom: 20px; left: 16px; }
     #stick { width: 48px; height: 48px; }
+    #hint { font-size: 11px; bottom: 6px; padding: 4px 10px; }
     #message { padding: 18px 22px; font-size: 14px; }
     #message h1 { font-size: 22px; }
   }
@@ -223,10 +275,14 @@
   </div>
 
   <div id="actions">
-    <button class="act-btn" id="btnHand">✋ За руку</button>
-    <button class="act-btn" id="btnHug">🤗 Обнять</button>
-    <button class="act-btn" id="btnKiss">💋 Поцелуй</button>
-    <button class="act-btn" id="btnCarry">🙆 На руки</button>
+    <button class="act-btn" id="btnHand" data-label="За руку (H)">✋<span class="key-hint">H</span></button>
+    <button class="act-btn" id="btnHug" data-label="Обнять (G)">🤗<span class="key-hint">G</span></button>
+    <button class="act-btn" id="btnKiss" data-label="Поцеловать (K)">💋<span class="key-hint">K</span></button>
+    <button class="act-btn" id="btnCarry" data-label="На руки (C)">🙆<span class="key-hint">C</span></button>
+  </div>
+
+  <div id="hint">
+    💡 <b>WASD</b>/стрелки — ходить &nbsp;|&nbsp; кнопки справа = нежность
   </div>
 
   <div id="joystick">

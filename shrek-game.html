@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Shrek's Swamp Adventure</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #1a2e1a;
+    font-family: 'Trebuchet MS', sans-serif;
+    color: #fff;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  #game-wrap {
+    position: relative;
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  canvas {
+    background: #3d5a2b;
+    display: block;
+    image-rendering: pixelated;
+    box-shadow: 0 0 40px rgba(0,0,0,.6);
+    max-width: 100%;
+    max-height: 100%;
+  }
+  #hud {
+    position: absolute;
+    top: 12px; left: 12px;
+    background: rgba(0,0,0,.55);
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 16px;
+    line-height: 1.5;
+    border: 2px solid #6b4423;
+    pointer-events: none;
+  }
+  #hud span { color: #aef36b; font-weight: bold; }
+  #message {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(20, 40, 20, .95);
+    border: 4px solid #6b4423;
+    border-radius: 18px;
+    padding: 30px 40px;
+    text-align: center;
+    font-size: 22px;
+    max-width: 90%;
+    display: none;
+    z-index: 10;
+    box-shadow: 0 0 30px rgba(174, 243, 107, .4);
+  }
+  #message h1 {
+    color: #aef36b;
+    font-size: 32px;
+    margin-bottom: 14px;
+    text-shadow: 2px 2px 0 #000;
+  }
+  #message button {
+    margin-top: 20px;
+    padding: 12px 28px;
+    font-size: 18px;
+    background: #aef36b;
+    color: #1a2e1a;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    font-family: inherit;
+  }
+  #message button:hover { background: #c8ff80; }
+
+  /* Mobile joystick */
+  #joystick {
+    position: absolute;
+    bottom: 30px; left: 30px;
+    width: 130px; height: 130px;
+    background: rgba(0,0,0,.3);
+    border: 3px solid rgba(255,255,255,.4);
+    border-radius: 50%;
+    display: none;
+    z-index: 5;
+    touch-action: none;
+  }
+  #stick {
+    position: absolute;
+    width: 60px; height: 60px;
+    background: rgba(174, 243, 107, .8);
+    border: 2px solid #fff;
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  @media (max-width: 768px), (pointer: coarse) {
+    #joystick { display: block; }
+    #hud { font-size: 13px; padding: 8px 10px; }
+  }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <canvas id="game" width="960" height="640"></canvas>
+
+  <div id="hud">
+    🧅 Луковицы: <span id="onions">0</span> / <span id="onions-total">10</span><br>
+    ⏱️ Время: <span id="timer">0</span>с<br>
+    ❤️ HP: <span id="hp">3</span>
+  </div>
+
+  <div id="message">
+    <h1 id="msg-title">Привет!</h1>
+    <p id="msg-text">Текст</p>
+    <button id="msg-btn">Играть</button>
+  </div>
+
+  <div id="joystick">
+    <div id="stick"></div>
+  </div>
+</div>
+
+<script>
+// ===== SETUP =====
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// Try to load Shrek image. Tries multiple file names; uses fallback if none load.
+const shrekImg = new Image();
+let shrekImgLoaded = false;
+const shrekCandidates = [
+  'assets/shrek.png',
+  'assets/shrek.jpeg',
+  'assets/shrek.jpg',
+  'assets/IMG_1012.jpeg',
+  'assets/IMG_1012.jpg',
+  'assets/IMG_1012.png'
+];
+let shrekTryIndex = 0;
+function tryLoadShrek() {
+  if (shrekTryIndex >= shrekCandidates.length) return;
+  shrekImg.src = shrekCandidates[shrekTryIndex++];
+}
+shrekImg.onload = () => { shrekImgLoaded = true; };
+shrekImg.onerror = () => { tryLoadShrek(); };
+tryLoadShrek();
+
+// ===== GAME STATE =====
+const TILE = 40;
+const MAP_W = 30, MAP_H = 20; // tiles
+const WORLD_W = MAP_W * TILE; // 1200
+const WORLD_H = MAP_H * TILE; // 800
+
+// 0 = grass, 1 = tree, 2 = water, 3 = rock, 4 = mud
+const map = [];
+function generateMap() {
+  for (let y = 0; y < MAP_H; y++) {
+    map[y] = [];
+    for (let x = 0; x < MAP_W; x++) {
+      // Border = trees
+      if (x === 0 || y === 0 || x === MAP_W-1 || y === MAP_H-1) {
+        map[y][x] = 1;
+      } else {
+        const r = Math.random();
+        if (r < 0.08) map[y][x] = 1;       // tree
+        else if (r < 0.11) map[y][x] = 3;  // rock
+        else if (r < 0.14) map[y][x] = 4;  // mud
+        else map[y][x] = 0;                // grass
+      }
+    }
+  }
+  // Water pond in the corner
+  for (let y = 2; y < 6; y++) {
+    for (let x = 2; x < 7; x++) {
+      if (Math.random() > 0.2) map[y][x] = 2;
+    }
+  }
+  // Clear spawn
+  for (let y = 8; y < 12; y++) {
+    for (let x = 13; x < 17; x++) {
+      map[y][x] = 0;
+    }
+  }
+}
+
+const player = {
+  x: 15 * TILE, y: 10 * TILE,
+  w: 36, h: 36,
+  speed: 3.2,
+  dir: 'down',
+  hp: 3,
+  invuln: 0,
+  bobFrame: 0
+};
+
+let onions = []; // {x, y, collected}
+let guards = []; // {x, y, vx, vy, patrolT}
+let fiona = null; // {x, y}
+let camera = { x: 0, y: 0 };
+
+let collected = 0;
+const ONIONS_TOTAL = 10;
+let startTime = 0, elapsed = 0;
+let gameRunning = false;
+let gameWon = false;
+
+// ===== ENTITY GENERATION =====
+function findFreeTile() {
+  for (let i = 0; i < 200; i++) {
+    const tx = 1 + Math.floor(Math.random() * (MAP_W - 2));
+    const ty = 1 + Math.floor(Math.random() * (MAP_H - 2));
+    if (map[ty][tx] === 0) return { x: tx * TILE + TILE/2, y: ty * TILE + TILE/2 };
+  }
+  return { x: WORLD_W/2, y: WORLD_H/2 };
+}
+
+function setupEntities() {
+  onions = [];
+  for (let i = 0; i < ONIONS_TOTAL; i++) {
+    const p = findFreeTile();
+    onions.push({ x: p.x, y: p.y, collected: false, bob: Math.random() * Math.PI * 2 });
+  }
+  guards = [];
+  for (let i = 0; i < 4; i++) {
+    const p = findFreeTile();
+    guards.push({
+      x: p.x, y: p.y, w: 32, h: 32,
+      vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2,
+      patrolT: Math.random() * 100
+    });
+  }
+  // Fiona in far corner
+  fiona = { x: (MAP_W - 3) * TILE, y: (MAP_H - 3) * TILE };
+  // make sure her tile is grass
+  map[MAP_H - 3][MAP_W - 3] = 0;
+}
+
+// ===== INPUT =====
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault();
+}, { passive: false });
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+// Joystick (mobile)
+const joystick = document.getElementById('joystick');
+const stick = document.getElementById('stick');
+let joyActive = false;
+let joyDX = 0, joyDY = 0;
+const JOY_R = 65;
+
+function joyStart(e) {
+  e.preventDefault();
+  joyActive = true;
+  joyMove(e);
+}
+function joyMove(e) {
+  if (!joyActive) return;
+  e.preventDefault();
+  const t = e.touches ? e.touches[0] : e;
+  const r = joystick.getBoundingClientRect();
+  const cx = r.left + r.width/2;
+  const cy = r.top + r.height/2;
+  let dx = t.clientX - cx;
+  let dy = t.clientY - cy;
+  const dist = Math.hypot(dx, dy);
+  if (dist > JOY_R) { dx = dx/dist*JOY_R; dy = dy/dist*JOY_R; }
+  stick.style.left = (50 + dx/JOY_R*30) + '%';
+  stick.style.top  = (50 + dy/JOY_R*30) + '%';
+  joyDX = dx / JOY_R;
+  joyDY = dy / JOY_R;
+}
+function joyEnd(e) {
+  joyActive = false;
+  joyDX = joyDY = 0;
+  stick.style.left = '50%';
+  stick.style.top = '50%';
+}
+joystick.addEventListener('touchstart', joyStart, { passive: false });
+joystick.addEventListener('touchmove', joyMove, { passive: false });
+joystick.addEventListener('touchend', joyEnd);
+joystick.addEventListener('mousedown', joyStart);
+window.addEventListener('mousemove', joyMove);
+window.addEventListener('mouseup', joyEnd);
+
+// ===== COLLISION =====
+function isBlocked(x, y) {
+  const tx = Math.floor(x / TILE);
+  const ty = Math.floor(y / TILE);
+  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+  const t = map[ty][tx];
+  return t === 1 || t === 2 || t === 3; // tree, water, rock
+}
+
+function isMud(x, y) {
+  const tx = Math.floor(x / TILE);
+  const ty = Math.floor(y / TILE);
+  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
+  return map[ty][tx] === 4;
+}
+
+function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+// ===== UPDATE =====
+function update(dt) {
+  if (!gameRunning) return;
+
+  // input vector
+  let dx = 0, dy = 0;
+  if (keys['w'] || keys['arrowup'] || keys['ц']) dy -= 1;
+  if (keys['s'] || keys['arrowdown'] || keys['ы']) dy += 1;
+  if (keys['a'] || keys['arrowleft'] || keys['ф']) dx -= 1;
+  if (keys['d'] || keys['arrowright'] || keys['в']) dx += 1;
+
+  if (joyActive && (Math.abs(joyDX) > 0.15 || Math.abs(joyDY) > 0.15)) {
+    dx = joyDX;
+    dy = joyDY;
+  }
+
+  // normalize
+  const mag = Math.hypot(dx, dy);
+  if (mag > 0) {
+    dx /= mag; dy /= mag;
+    if (Math.abs(dx) > Math.abs(dy)) player.dir = dx > 0 ? 'right' : 'left';
+    else player.dir = dy > 0 ? 'down' : 'up';
+    player.bobFrame += dt * 8;
+  }
+
+  // mud slows
+  let speed = player.speed;
+  if (isMud(player.x, player.y)) speed *= 0.5;
+
+  // move with collision (axis-separated)
+  const newX = player.x + dx * speed;
+  const newY = player.y + dy * speed;
+  const half = player.w / 2 - 4;
+
+  if (!isBlocked(newX - half, player.y - half) &&
+      !isBlocked(newX + half, player.y - half) &&
+      !isBlocked(newX - half, player.y + half) &&
+      !isBlocked(newX + half, player.y + half)) {
+    player.x = newX;
+  }
+  if (!isBlocked(player.x - half, newY - half) &&
+      !isBlocked(player.x + half, newY - half) &&
+      !isBlocked(player.x - half, newY + half) &&
+      !isBlocked(player.x + half, newY + half)) {
+    player.y = newY;
+  }
+
+  // collect onions
+  onions.forEach(o => {
+    if (!o.collected && Math.hypot(o.x - player.x, o.y - player.y) < 28) {
+      o.collected = true;
+      collected++;
+    }
+    o.bob += dt * 3;
+  });
+
+  // guards AI: simple patrol
+  guards.forEach(g => {
+    g.patrolT -= dt * 60;
+    if (g.patrolT <= 0) {
+      g.vx = (Math.random() - 0.5) * 2;
+      g.vy = (Math.random() - 0.5) * 2;
+      g.patrolT = 60 + Math.random() * 120;
+    }
+    // chase if close
+    const distP = Math.hypot(player.x - g.x, player.y - g.y);
+    if (distP < 180) {
+      const dxg = (player.x - g.x) / distP;
+      const dyg = (player.y - g.y) / distP;
+      g.vx = dxg * 1.5;
+      g.vy = dyg * 1.5;
+    }
+    const nx = g.x + g.vx;
+    const ny = g.y + g.vy;
+    if (!isBlocked(nx, g.y)) g.x = nx; else g.vx *= -1;
+    if (!isBlocked(g.x, ny)) g.y = ny; else g.vy *= -1;
+
+    // hit player
+    if (player.invuln <= 0 &&
+        rectsOverlap(g.x - g.w/2, g.y - g.h/2, g.w, g.h,
+                     player.x - player.w/2, player.y - player.h/2, player.w, player.h)) {
+      player.hp--;
+      player.invuln = 90;
+      // knockback
+      const ang = Math.atan2(player.y - g.y, player.x - g.x);
+      player.x += Math.cos(ang) * 30;
+      player.y += Math.sin(ang) * 30;
+      if (player.hp <= 0) endGame(false);
+    }
+  });
+
+  if (player.invuln > 0) player.invuln -= dt * 60;
+
+  // win check
+  if (collected >= ONIONS_TOTAL &&
+      Math.hypot(fiona.x - player.x, fiona.y - player.y) < 50) {
+    endGame(true);
+  }
+
+  // camera
+  camera.x = player.x - W/2;
+  camera.y = player.y - H/2;
+  camera.x = Math.max(0, Math.min(WORLD_W - W, camera.x));
+  camera.y = Math.max(0, Math.min(WORLD_H - H, camera.y));
+
+  // hud
+  elapsed = (performance.now() - startTime) / 1000;
+  document.getElementById('onions').textContent = collected;
+  document.getElementById('timer').textContent = Math.floor(elapsed);
+  document.getElementById('hp').textContent = '❤️'.repeat(Math.max(0, player.hp));
+}
+
+// ===== DRAW =====
+function drawTile(t, x, y) {
+  switch (t) {
+    case 0: // grass
+      ctx.fillStyle = '#3d5a2b';
+      ctx.fillRect(x, y, TILE, TILE);
+      // grass tufts
+      ctx.fillStyle = '#4d6e35';
+      ctx.fillRect(x+8, y+10, 3, 6);
+      ctx.fillRect(x+22, y+24, 3, 6);
+      ctx.fillRect(x+30, y+8, 3, 6);
+      break;
+    case 1: // tree
+      ctx.fillStyle = '#3d5a2b';
+      ctx.fillRect(x, y, TILE, TILE);
+      // trunk
+      ctx.fillStyle = '#5c3a1e';
+      ctx.fillRect(x + TILE/2 - 4, y + TILE - 14, 8, 14);
+      // foliage
+      ctx.fillStyle = '#1e3a14';
+      ctx.beginPath();
+      ctx.arc(x + TILE/2, y + TILE/2 - 2, 18, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#2d4d1e';
+      ctx.beginPath();
+      ctx.arc(x + TILE/2 - 5, y + TILE/2 - 6, 10, 0, Math.PI*2);
+      ctx.fill();
+      break;
+    case 2: // water
+      ctx.fillStyle = '#2a4a5e';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#3d6a82';
+      const wave = Math.sin((performance.now()/300) + x*0.1) * 2;
+      ctx.fillRect(x + 4, y + 12 + wave, TILE - 8, 3);
+      ctx.fillRect(x + 8, y + 26 - wave, TILE - 16, 3);
+      break;
+    case 3: // rock
+      ctx.fillStyle = '#3d5a2b';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#7a7a7a';
+      ctx.beginPath();
+      ctx.ellipse(x + TILE/2, y + TILE/2 + 4, 14, 10, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#9a9a9a';
+      ctx.beginPath();
+      ctx.ellipse(x + TILE/2 - 3, y + TILE/2, 8, 5, 0, 0, Math.PI*2);
+      ctx.fill();
+      break;
+    case 4: // mud
+      ctx.fillStyle = '#5c4628';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#3d2e18';
+      ctx.fillRect(x + 6, y + 8, 6, 4);
+      ctx.fillRect(x + 22, y + 22, 8, 4);
+      break;
+  }
+}
+
+function drawShrek(sx, sy) {
+  const bob = Math.sin(player.bobFrame) * 2;
+
+  if (shrekImgLoaded) {
+    // Use the real PNG
+    if (player.invuln > 0 && Math.floor(player.invuln / 6) % 2 === 0) {
+      ctx.globalAlpha = 0.4;
+    }
+    const size = 72;
+    // mirror for left direction
+    if (player.dir === 'left') {
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(shrekImg, -sx - size/2, sy - size/2 + bob, size, size);
+      ctx.restore();
+    } else {
+      ctx.drawImage(shrekImg, sx - size/2, sy - size/2 + bob, size, size);
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  // Fallback Shrek (drawn by code)
+  if (player.invuln > 0 && Math.floor(player.invuln / 6) % 2 === 0) {
+    ctx.globalAlpha = 0.4;
+  }
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + 18, 18, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // body (shirt)
+  ctx.fillStyle = '#e8dcc4';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + 6 + bob, 16, 14, 0, 0, Math.PI*2);
+  ctx.fill();
+  // vest
+  ctx.fillStyle = '#5c3a1e';
+  ctx.fillRect(sx - 14, sy - 2 + bob, 8, 14);
+  ctx.fillRect(sx + 6, sy - 2 + bob, 8, 14);
+
+  // head (green)
+  ctx.fillStyle = '#7ba24a';
+  ctx.beginPath();
+  ctx.arc(sx, sy - 10 + bob, 14, 0, Math.PI*2);
+  ctx.fill();
+  // ears (trumpet)
+  ctx.fillStyle = '#7ba24a';
+  ctx.beginPath();
+  ctx.ellipse(sx - 14, sy - 10 + bob, 5, 3, -0.3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(sx + 14, sy - 10 + bob, 5, 3, 0.3, 0, Math.PI*2);
+  ctx.fill();
+  // eyes
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(sx - 5, sy - 12 + bob, 3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(sx + 5, sy - 12 + bob, 3, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#000';
+  const eyeOffX = player.dir === 'left' ? -1 : player.dir === 'right' ? 1 : 0;
+  const eyeOffY = player.dir === 'up' ? -1 : player.dir === 'down' ? 1 : 0;
+  ctx.beginPath(); ctx.arc(sx - 5 + eyeOffX, sy - 12 + eyeOffY + bob, 1.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(sx + 5 + eyeOffX, sy - 12 + eyeOffY + bob, 1.5, 0, Math.PI*2); ctx.fill();
+  // mouth
+  ctx.strokeStyle = '#3d2618';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(sx, sy - 6 + bob, 4, 0.2, Math.PI - 0.2);
+  ctx.stroke();
+
+  ctx.globalAlpha = 1;
+}
+
+function drawOnion(o) {
+  if (o.collected) return;
+  const x = o.x - camera.x;
+  const y = o.y - camera.y + Math.sin(o.bob) * 3;
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 14, 8, 3, 0, 0, Math.PI*2);
+  ctx.fill();
+  // bulb
+  ctx.fillStyle = '#e8c89a';
+  ctx.beginPath();
+  ctx.ellipse(x, y, 8, 10, 0, 0, Math.PI*2);
+  ctx.fill();
+  // stripes
+  ctx.strokeStyle = '#a08560';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x - 6, y - 2); ctx.quadraticCurveTo(x, y + 4, x + 6, y - 2); ctx.stroke();
+  // green sprout
+  ctx.fillStyle = '#5c8a3a';
+  ctx.fillRect(x - 1, y - 14, 2, 6);
+  ctx.fillStyle = '#7ba24a';
+  ctx.beginPath();
+  ctx.ellipse(x - 3, y - 13, 3, 1.5, -0.5, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + 3, y - 13, 3, 1.5, 0.5, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawGuard(g) {
+  const x = g.x - camera.x;
+  const y = g.y - camera.y;
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 14, 12, 4, 0, 0, Math.PI*2);
+  ctx.fill();
+  // body (red tunic)
+  ctx.fillStyle = '#a83232';
+  ctx.fillRect(x - 10, y - 4, 20, 16);
+  // head
+  ctx.fillStyle = '#e8b890';
+  ctx.beginPath();
+  ctx.arc(x, y - 10, 8, 0, Math.PI*2);
+  ctx.fill();
+  // helmet
+  ctx.fillStyle = '#888';
+  ctx.beginPath();
+  ctx.arc(x, y - 12, 9, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(x - 9, y - 13, 18, 3);
+  // angry eyes
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x - 4, y - 9, 2, 2);
+  ctx.fillRect(x + 2, y - 9, 2, 2);
+  // spear
+  ctx.strokeStyle = '#5c3a1e';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x + 12, y - 18);
+  ctx.lineTo(x + 12, y + 14);
+  ctx.stroke();
+  ctx.fillStyle = '#aaa';
+  ctx.beginPath();
+  ctx.moveTo(x + 12, y - 22);
+  ctx.lineTo(x + 8, y - 16);
+  ctx.lineTo(x + 16, y - 16);
+  ctx.fill();
+}
+
+function drawFiona() {
+  const x = fiona.x - camera.x;
+  const y = fiona.y - camera.y;
+  const bob = Math.sin(performance.now() / 300) * 2;
+  // sparkle ring (signaling final point)
+  ctx.strokeStyle = collected >= ONIONS_TOTAL ? '#ffe066' : '#888';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.arc(x, y, 30, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 18, 14, 4, 0, 0, Math.PI*2);
+  ctx.fill();
+  // dress
+  ctx.fillStyle = '#4a8a3a';
+  ctx.beginPath();
+  ctx.moveTo(x - 12, y + 14 + bob);
+  ctx.lineTo(x - 8, y - 4 + bob);
+  ctx.lineTo(x + 8, y - 4 + bob);
+  ctx.lineTo(x + 12, y + 14 + bob);
+  ctx.closePath();
+  ctx.fill();
+  // head
+  ctx.fillStyle = '#ffd9b3';
+  ctx.beginPath();
+  ctx.arc(x, y - 10 + bob, 9, 0, Math.PI*2);
+  ctx.fill();
+  // red hair
+  ctx.fillStyle = '#c84a1e';
+  ctx.beginPath();
+  ctx.arc(x, y - 14 + bob, 10, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(x - 10, y - 14 + bob, 4, 14);
+  ctx.fillRect(x + 6, y - 14 + bob, 4, 14);
+  // eyes
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x - 4, y - 10 + bob, 1.5, 2);
+  ctx.fillRect(x + 3, y - 10 + bob, 1.5, 2);
+  // smile
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(x, y - 7 + bob, 2, 0, Math.PI);
+  ctx.stroke();
+  // hint label
+  if (collected < ONIONS_TOTAL) {
+    ctx.fillStyle = 'rgba(0,0,0,.7)';
+    ctx.fillRect(x - 70, y - 38, 140, 18);
+    ctx.fillStyle = '#fff';
+    ctx.font = '12px Trebuchet MS';
+    ctx.textAlign = 'center';
+    ctx.fillText('Собери все луковицы! 🧅', x, y - 25);
+  } else {
+    ctx.fillStyle = 'rgba(255, 224, 102, .9)';
+    ctx.fillRect(x - 50, y - 38, 100, 18);
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 12px Trebuchet MS';
+    ctx.textAlign = 'center';
+    ctx.fillText('Подойди ко мне! 💚', x, y - 25);
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // tiles in viewport
+  const x0 = Math.max(0, Math.floor(camera.x / TILE));
+  const y0 = Math.max(0, Math.floor(camera.y / TILE));
+  const x1 = Math.min(MAP_W, Math.ceil((camera.x + W) / TILE));
+  const y1 = Math.min(MAP_H, Math.ceil((camera.y + H) / TILE));
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      drawTile(map[y][x], x*TILE - camera.x, y*TILE - camera.y);
+    }
+  }
+
+  // entities
+  onions.forEach(drawOnion);
+  drawFiona();
+  guards.forEach(drawGuard);
+
+  // player
+  drawShrek(player.x - camera.x, player.y - camera.y);
+}
+
+// ===== GAME FLOW =====
+function showMessage(title, text, btnLabel, onClick) {
+  const m = document.getElementById('message');
+  document.getElementById('msg-title').textContent = title;
+  document.getElementById('msg-text').innerHTML = text;
+  const btn = document.getElementById('msg-btn');
+  btn.textContent = btnLabel;
+  btn.onclick = () => {
+    m.style.display = 'none';
+    onClick();
+  };
+  m.style.display = 'block';
+}
+
+function startGame() {
+  generateMap();
+  setupEntities();
+  player.x = 15 * TILE;
+  player.y = 10 * TILE;
+  player.hp = 3;
+  player.invuln = 0;
+  collected = 0;
+  startTime = performance.now();
+  gameRunning = true;
+  gameWon = false;
+}
+
+function endGame(won) {
+  gameRunning = false;
+  gameWon = won;
+  const t = Math.floor(elapsed);
+  if (won) {
+    const best = +(localStorage.getItem('shrek-best') || 9999);
+    if (t < best) localStorage.setItem('shrek-best', t);
+    const bestNow = localStorage.getItem('shrek-best');
+    showMessage(
+      '💚 Шрек нашёл Фиону!',
+      `Ты собрал все луковицы и спас принцессу! 🎉<br><br>
+       Время: <b>${t}с</b><br>
+       Лучший рекорд: <b>${bestNow}с</b>`,
+      'Сыграть снова',
+      startGame
+    );
+  } else {
+    showMessage(
+      '💀 Шрека поймала стража!',
+      `Стражники Фаркуада оказались сильнее...<br><br>
+       Луковиц собрано: <b>${collected}/${ONIONS_TOTAL}</b><br>
+       Время: <b>${t}с</b>`,
+      'Попробовать снова',
+      startGame
+    );
+  }
+}
+
+// ===== MAIN LOOP =====
+let lastT = performance.now();
+function loop() {
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ===== START =====
+showMessage(
+  '🟢 Shrek\'s Swamp Adventure',
+  `Помоги Шреку найти Фиону на болоте!<br><br>
+   🧅 Собери все <b>10 луковиц</b><br>
+   🛡️ Не попадайся <b>стражникам Фаркуада</b><br>
+   👸 Подойди к <b>Фионе</b>, когда соберёшь всё<br><br>
+   <b>Управление:</b><br>
+   💻 WASD или стрелки<br>
+   📱 Джойстик внизу слева`,
+  'Начать! 💚',
+  startGame
+);
+
+loop();
+
+// resize handling: fit canvas to window keeping aspect
+function fit() {
+  const wrap = document.getElementById('game-wrap');
+  const ratio = W / H;
+  let cw = wrap.clientWidth;
+  let ch = wrap.clientHeight;
+  if (cw / ch > ratio) cw = ch * ratio;
+  else ch = cw / ratio;
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
+}
+window.addEventListener('resize', fit);
+fit();
+</script>
+</body>
+</html>

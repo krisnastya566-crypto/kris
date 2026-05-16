@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-<title>Shrek's Swamp Adventure</title>
+<title>Болото Шрека — Экскурсия</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     width: 100%; height: 100%;
-    background: #1a2e1a;
+    background: #0e1a0e;
     font-family: 'Trebuchet MS', sans-serif;
     color: #fff;
     overflow: hidden;
@@ -22,7 +22,7 @@
     display: flex; align-items: center; justify-content: center;
   }
   canvas {
-    background: #3d5a2b;
+    background: #2b3d1f;
     display: block;
     image-rendering: pixelated;
     box-shadow: 0 0 40px rgba(0,0,0,.6);
@@ -35,12 +35,46 @@
     background: rgba(0,0,0,.55);
     padding: 10px 14px;
     border-radius: 10px;
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.5;
     border: 2px solid #6b4423;
     pointer-events: none;
+    max-width: 320px;
   }
-  #hud span { color: #aef36b; font-weight: bold; }
+  #hud b { color: #aef36b; }
+  #title-bar {
+    position: absolute;
+    top: 12px; right: 12px;
+    background: rgba(0,0,0,.55);
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 2px solid #6b4423;
+    font-size: 14px;
+    pointer-events: none;
+  }
+  #title-bar b { color: #aef36b; }
+  #dialog {
+    position: absolute;
+    bottom: 30px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20, 40, 20, .95);
+    border: 4px solid #6b4423;
+    border-radius: 18px;
+    padding: 18px 26px;
+    text-align: center;
+    font-size: 18px;
+    max-width: 80%;
+    min-width: 320px;
+    display: none;
+    z-index: 8;
+    box-shadow: 0 0 30px rgba(174, 243, 107, .35);
+  }
+  #dialog h2 {
+    color: #aef36b;
+    font-size: 22px;
+    margin-bottom: 8px;
+    text-shadow: 2px 2px 0 #000;
+  }
   #message {
     position: absolute;
     top: 50%; left: 50%;
@@ -50,7 +84,7 @@
     border-radius: 18px;
     padding: 30px 40px;
     text-align: center;
-    font-size: 22px;
+    font-size: 18px;
     max-width: 90%;
     display: none;
     z-index: 10;
@@ -58,7 +92,7 @@
   }
   #message h1 {
     color: #aef36b;
-    font-size: 32px;
+    font-size: 30px;
     margin-bottom: 14px;
     text-shadow: 2px 2px 0 #000;
   }
@@ -76,7 +110,6 @@
   }
   #message button:hover { background: #c8ff80; }
 
-  /* Mobile joystick */
   #joystick {
     position: absolute;
     bottom: 30px; left: 30px;
@@ -100,7 +133,9 @@
   }
   @media (max-width: 768px), (pointer: coarse) {
     #joystick { display: block; }
-    #hud { font-size: 13px; padding: 8px 10px; }
+    #hud { font-size: 12px; padding: 8px 10px; max-width: 220px; }
+    #title-bar { font-size: 12px; }
+    #dialog { font-size: 15px; padding: 14px 18px; bottom: 180px; }
   }
 </style>
 </head>
@@ -109,9 +144,18 @@
   <canvas id="game" width="960" height="640"></canvas>
 
   <div id="hud">
-    🧅 Луковицы: <span id="onions">0</span> / <span id="onions-total">10</span><br>
-    ⏱️ Время: <span id="timer">0</span>с<br>
-    ❤️ HP: <span id="hp">3</span>
+    🟢 <b>Болото Шрека</b><br>
+    Гуляй и осматривай!<br>
+    Найдено мест: <b><span id="visited">0</span> / 3</b>
+  </div>
+
+  <div id="title-bar">
+    📍 <b><span id="location">Болото</span></b>
+  </div>
+
+  <div id="dialog">
+    <h2 id="dlg-title"></h2>
+    <div id="dlg-text"></div>
   </div>
 
   <div id="message">
@@ -131,114 +175,179 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 
-// Try to load Shrek image. Tries multiple file names; uses fallback if none load.
-const shrekImg = new Image();
-let shrekImgLoaded = false;
-const shrekCandidates = [
-  'assets/shrek.png',
-  'assets/shrek.jpeg',
-  'assets/shrek.jpg',
-  'assets/IMG_1012.jpeg',
-  'assets/IMG_1012.jpg',
-  'assets/IMG_1012.png'
-];
-let shrekTryIndex = 0;
-function tryLoadShrek() {
-  if (shrekTryIndex >= shrekCandidates.length) return;
-  shrekImg.src = shrekCandidates[shrekTryIndex++];
-}
-shrekImg.onload = () => { shrekImgLoaded = true; };
-shrekImg.onerror = () => { tryLoadShrek(); };
-tryLoadShrek();
-
-// ===== GAME STATE =====
+// ===== WORLD =====
 const TILE = 40;
-const MAP_W = 30, MAP_H = 20; // tiles
-const WORLD_W = MAP_W * TILE; // 1200
-const WORLD_H = MAP_H * TILE; // 800
+const MAP_W = 32, MAP_H = 22;
+const WORLD_W = MAP_W * TILE;
+const WORLD_H = MAP_H * TILE;
 
-// 0 = grass, 1 = tree, 2 = water, 3 = rock, 4 = mud
+// Tile types:
+// 0 grass, 1 tree, 2 water, 3 reeds, 4 mud, 5 path, 6 mossy stone
 const map = [];
+
+// Static landmarks (occupy multiple tiles): house, outhouse, mud bath, sign, stump, mushroom ring
+const landmarks = [];
+
+function inRect(x, y, rx, ry, rw, rh) {
+  return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
+}
+
 function generateMap() {
+  // base: grass with some random reeds and trees on the border
   for (let y = 0; y < MAP_H; y++) {
     map[y] = [];
     for (let x = 0; x < MAP_W; x++) {
-      // Border = trees
-      if (x === 0 || y === 0 || x === MAP_W-1 || y === MAP_H-1) {
-        map[y][x] = 1;
+      // Border of trees forms the swamp edge
+      if (x < 2 || y < 2 || x >= MAP_W - 2 || y >= MAP_H - 2) {
+        map[y][x] = (Math.random() < 0.85) ? 1 : 0;
       } else {
         const r = Math.random();
-        if (r < 0.08) map[y][x] = 1;       // tree
-        else if (r < 0.11) map[y][x] = 3;  // rock
-        else if (r < 0.14) map[y][x] = 4;  // mud
+        if (r < 0.04) map[y][x] = 1;       // tree
+        else if (r < 0.07) map[y][x] = 3;  // reeds
+        else if (r < 0.085) map[y][x] = 6; // mossy stone
         else map[y][x] = 0;                // grass
       }
     }
   }
-  // Water pond in the corner
-  for (let y = 2; y < 6; y++) {
-    for (let x = 2; x < 7; x++) {
-      if (Math.random() > 0.2) map[y][x] = 2;
+
+  // Big swamp water pond on the south-west
+  for (let y = 13; y < 20; y++) {
+    for (let x = 2; x < 12; x++) {
+      const cx = 7, cy = 16;
+      const d = Math.hypot(x - cx, (y - cy) * 1.3);
+      if (d < 5 + Math.random() * 0.8) map[y][x] = 2;
     }
   }
-  // Clear spawn
-  for (let y = 8; y < 12; y++) {
-    for (let x = 13; x < 17; x++) {
-      map[y][x] = 0;
+  // reeds around water
+  for (let y = 11; y < 21; y++) {
+    for (let x = 2; x < 14; x++) {
+      if (map[y][x] === 0 && Math.random() < 0.25) {
+        // only near water
+        let nearWater = false;
+        for (let dy = -1; dy <= 1 && !nearWater; dy++)
+          for (let dx = -1; dx <= 1 && !nearWater; dx++) {
+            const ny = y + dy, nx = x + dx;
+            if (ny>=0 && nx>=0 && ny<MAP_H && nx<MAP_W && map[ny][nx] === 2) nearWater = true;
+          }
+        if (nearWater) map[y][x] = 3;
+      }
     }
   }
+
+  // Small marshy puddles spread around
+  const puddles = [
+    [20, 5, 3, 2], [25, 14, 2, 2], [6, 5, 2, 2], [17, 18, 3, 2]
+  ];
+  puddles.forEach(([px, py, pw, ph]) => {
+    for (let y = py; y < py + ph; y++)
+      for (let x = px; x < px + pw; x++)
+        if (map[y] && map[y][x] !== undefined) map[y][x] = 2;
+  });
+
+  // Path from spawn winding to landmarks
+  const pathTiles = [];
+  // Spawn around (16, 11)
+  for (let x = 5; x < 28; x++) pathTiles.push([x, 11]);
+  for (let y = 6; y < 12; y++) pathTiles.push([22, y]);
+  for (let x = 22; x < 28; x++) pathTiles.push([x, 6]);
+  for (let y = 11; y < 16; y++) pathTiles.push([12, y]);
+  pathTiles.forEach(([x, y]) => {
+    if (map[y] && map[y][x] !== undefined && map[y][x] !== 2) map[y][x] = 5;
+  });
+
+  // Landmark tile clearings:
+  // House at (4..8, 4..8)
+  clearArea(4, 4, 5, 5);
+  // Outhouse at (24..26, 4..7)
+  clearArea(24, 4, 3, 4);
+  // Mud bath at (12..16, 13..16)
+  clearArea(12, 13, 5, 4);
+  // mark tiles of the mud bath as mud
+  for (let y = 14; y < 16; y++)
+    for (let x = 13; x < 16; x++)
+      map[y][x] = 4;
+
+  // Mushroom ring near (26, 14)
+  clearArea(25, 13, 4, 4);
+
+  // Spawn area clear
+  clearArea(15, 10, 4, 3);
+
+  // Define landmarks (in pixels)
+  landmarks.length = 0;
+  landmarks.push({
+    id: 'house',
+    name: 'Дом Шрека',
+    x: 6 * TILE, y: 6 * TILE,
+    w: 4 * TILE, h: 3.5 * TILE,
+    solidPad: 6,
+    dialogTitle: '🏠 Дом Шрека',
+    dialogText: 'Уютный домик из брёвен и веток, с зелёной мхом крышей и кривой трубой. Изнутри пахнет луковым супом и тишиной. «Уходите с моего болота!» — донеслось из окна.'
+  });
+  landmarks.push({
+    id: 'outhouse',
+    name: 'Уличный туалет',
+    x: 25 * TILE, y: 5 * TILE,
+    w: 1.5 * TILE, h: 2.2 * TILE,
+    solidPad: 4,
+    dialogTitle: '🚽 Уличный туалет',
+    dialogText: 'Дощатая будка с вырезанным сердечком на двери. Любимое место Шрека для чтения утренней газеты. Внутри слышно довольное мычание...'
+  });
+  landmarks.push({
+    id: 'mudbath',
+    name: 'Грязевая ванна',
+    x: 13 * TILE, y: 14 * TILE,
+    w: 3 * TILE, h: 2 * TILE,
+    solidPad: -8, // a bit forgiving — you can stand at its edge
+    dialogTitle: '🛁 Грязевая ванна',
+    dialogText: 'Тёплая, булькающая лужа жирной болотной грязи. Шрек называет это «спа». Пузырьки пахнут... ну, как Шрек. Идеальная процедура для огра!'
+  });
+  // a small wooden sign at spawn
+  landmarks.push({
+    id: 'sign',
+    name: 'Указатель',
+    x: 17 * TILE, y: 11 * TILE,
+    w: 0.8 * TILE, h: 1.2 * TILE,
+    solidPad: 2,
+    dialogTitle: '🪧 Указатель',
+    dialogText: '«Добро пожаловать на болото! ➡ туалет, ⬅ дом, ⬇ ванна. Осторожно: огр!» Подпись внизу: «не кормить осла».'
+  });
 }
 
+function clearArea(tx, ty, w, h) {
+  for (let y = ty; y < ty + h; y++)
+    for (let x = tx; x < tx + w; x++)
+      if (map[y] && map[y][x] !== undefined && map[y][x] !== 2) map[y][x] = 0;
+}
+
+// ===== PLAYER =====
 const player = {
-  x: 15 * TILE, y: 10 * TILE,
-  w: 36, h: 36,
-  speed: 3.2,
+  x: 16.5 * TILE, y: 11.5 * TILE,
+  w: 30, h: 30,
+  speed: 3,
   dir: 'down',
-  hp: 3,
-  invuln: 0,
-  bobFrame: 0
+  bobFrame: 0,
+  moving: false
 };
 
-let onions = []; // {x, y, collected}
-let guards = []; // {x, y, vx, vy, patrolT}
-let fiona = null; // {x, y}
 let camera = { x: 0, y: 0 };
+let visited = new Set();
+let nearLandmark = null;
+let timeStart = 0;
 
-let collected = 0;
-const ONIONS_TOTAL = 10;
-let startTime = 0, elapsed = 0;
-let gameRunning = false;
-let gameWon = false;
-
-// ===== ENTITY GENERATION =====
-function findFreeTile() {
-  for (let i = 0; i < 200; i++) {
-    const tx = 1 + Math.floor(Math.random() * (MAP_W - 2));
-    const ty = 1 + Math.floor(Math.random() * (MAP_H - 2));
-    if (map[ty][tx] === 0) return { x: tx * TILE + TILE/2, y: ty * TILE + TILE/2 };
-  }
-  return { x: WORLD_W/2, y: WORLD_H/2 };
-}
-
-function setupEntities() {
-  onions = [];
-  for (let i = 0; i < ONIONS_TOTAL; i++) {
-    const p = findFreeTile();
-    onions.push({ x: p.x, y: p.y, collected: false, bob: Math.random() * Math.PI * 2 });
-  }
-  guards = [];
-  for (let i = 0; i < 4; i++) {
-    const p = findFreeTile();
-    guards.push({
-      x: p.x, y: p.y, w: 32, h: 32,
-      vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2,
-      patrolT: Math.random() * 100
+// Ambient: butterflies and dragonflies
+const bugs = [];
+function spawnBugs() {
+  bugs.length = 0;
+  for (let i = 0; i < 14; i++) {
+    bugs.push({
+      x: Math.random() * WORLD_W,
+      y: Math.random() * WORLD_H,
+      t: Math.random() * 1000,
+      kind: Math.random() < 0.5 ? 'butterfly' : 'dragonfly',
+      hue: Math.random() * 360
     });
   }
-  // Fiona in far corner
-  fiona = { x: (MAP_W - 3) * TILE, y: (MAP_H - 3) * TILE };
-  // make sure her tile is grass
-  map[MAP_H - 3][MAP_W - 3] = 0;
 }
 
 // ===== INPUT =====
@@ -249,39 +358,28 @@ window.addEventListener('keydown', e => {
 }, { passive: false });
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
-// Joystick (mobile)
 const joystick = document.getElementById('joystick');
 const stick = document.getElementById('stick');
 let joyActive = false;
 let joyDX = 0, joyDY = 0;
 const JOY_R = 65;
-
-function joyStart(e) {
-  e.preventDefault();
-  joyActive = true;
-  joyMove(e);
-}
+function joyStart(e) { e.preventDefault(); joyActive = true; joyMove(e); }
 function joyMove(e) {
   if (!joyActive) return;
   e.preventDefault();
   const t = e.touches ? e.touches[0] : e;
   const r = joystick.getBoundingClientRect();
-  const cx = r.left + r.width/2;
-  const cy = r.top + r.height/2;
-  let dx = t.clientX - cx;
-  let dy = t.clientY - cy;
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+  let dx = t.clientX - cx, dy = t.clientY - cy;
   const dist = Math.hypot(dx, dy);
   if (dist > JOY_R) { dx = dx/dist*JOY_R; dy = dy/dist*JOY_R; }
   stick.style.left = (50 + dx/JOY_R*30) + '%';
   stick.style.top  = (50 + dy/JOY_R*30) + '%';
-  joyDX = dx / JOY_R;
-  joyDY = dy / JOY_R;
+  joyDX = dx / JOY_R; joyDY = dy / JOY_R;
 }
-function joyEnd(e) {
-  joyActive = false;
-  joyDX = joyDY = 0;
-  stick.style.left = '50%';
-  stick.style.top = '50%';
+function joyEnd() {
+  joyActive = false; joyDX = joyDY = 0;
+  stick.style.left = '50%'; stick.style.top = '50%';
 }
 joystick.addEventListener('touchstart', joyStart, { passive: false });
 joystick.addEventListener('touchmove', joyMove, { passive: false });
@@ -291,12 +389,27 @@ window.addEventListener('mousemove', joyMove);
 window.addEventListener('mouseup', joyEnd);
 
 // ===== COLLISION =====
-function isBlocked(x, y) {
+function isBlockedTile(x, y) {
   const tx = Math.floor(x / TILE);
   const ty = Math.floor(y / TILE);
   if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
   const t = map[ty][tx];
-  return t === 1 || t === 2 || t === 3; // tree, water, rock
+  // tree, water blocked. mossy stone is small obstacle. mud is walkable but slow.
+  return t === 1 || t === 2 || t === 6;
+}
+
+function isBlockedLandmark(x, y) {
+  for (const l of landmarks) {
+    const pad = l.solidPad || 0;
+    if (pad < 0) continue; // mud bath: not solid
+    if (x > l.x + pad && x < l.x + l.w - pad &&
+        y > l.y + pad && y < l.y + l.h - pad) return true;
+  }
+  return false;
+}
+
+function isBlocked(x, y) {
+  return isBlockedTile(x, y) || isBlockedLandmark(x, y);
 }
 
 function isMud(x, y) {
@@ -306,15 +419,8 @@ function isMud(x, y) {
   return map[ty][tx] === 4;
 }
 
-function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
-  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
-}
-
 // ===== UPDATE =====
 function update(dt) {
-  if (!gameRunning) return;
-
-  // input vector
   let dx = 0, dy = 0;
   if (keys['w'] || keys['arrowup'] || keys['ц']) dy -= 1;
   if (keys['s'] || keys['arrowdown'] || keys['ы']) dy += 1;
@@ -322,12 +428,11 @@ function update(dt) {
   if (keys['d'] || keys['arrowright'] || keys['в']) dx += 1;
 
   if (joyActive && (Math.abs(joyDX) > 0.15 || Math.abs(joyDY) > 0.15)) {
-    dx = joyDX;
-    dy = joyDY;
+    dx = joyDX; dy = joyDY;
   }
 
-  // normalize
   const mag = Math.hypot(dx, dy);
+  player.moving = mag > 0;
   if (mag > 0) {
     dx /= mag; dy /= mag;
     if (Math.abs(dx) > Math.abs(dy)) player.dir = dx > 0 ? 'right' : 'left';
@@ -335,14 +440,12 @@ function update(dt) {
     player.bobFrame += dt * 8;
   }
 
-  // mud slows
   let speed = player.speed;
-  if (isMud(player.x, player.y)) speed *= 0.5;
+  if (isMud(player.x, player.y)) speed *= 0.45;
 
-  // move with collision (axis-separated)
+  const half = player.w / 2 - 4;
   const newX = player.x + dx * speed;
   const newY = player.y + dy * speed;
-  const half = player.w / 2 - 4;
 
   if (!isBlocked(newX - half, player.y - half) &&
       !isBlocked(newX + half, player.y - half) &&
@@ -357,344 +460,507 @@ function update(dt) {
     player.y = newY;
   }
 
-  // collect onions
-  onions.forEach(o => {
-    if (!o.collected && Math.hypot(o.x - player.x, o.y - player.y) < 28) {
-      o.collected = true;
-      collected++;
-    }
-    o.bob += dt * 3;
-  });
+  // clamp inside world
+  player.x = Math.max(20, Math.min(WORLD_W - 20, player.x));
+  player.y = Math.max(20, Math.min(WORLD_H - 20, player.y));
 
-  // guards AI: simple patrol
-  guards.forEach(g => {
-    g.patrolT -= dt * 60;
-    if (g.patrolT <= 0) {
-      g.vx = (Math.random() - 0.5) * 2;
-      g.vy = (Math.random() - 0.5) * 2;
-      g.patrolT = 60 + Math.random() * 120;
-    }
-    // chase if close
-    const distP = Math.hypot(player.x - g.x, player.y - g.y);
-    if (distP < 180) {
-      const dxg = (player.x - g.x) / distP;
-      const dyg = (player.y - g.y) / distP;
-      g.vx = dxg * 1.5;
-      g.vy = dyg * 1.5;
-    }
-    const nx = g.x + g.vx;
-    const ny = g.y + g.vy;
-    if (!isBlocked(nx, g.y)) g.x = nx; else g.vx *= -1;
-    if (!isBlocked(g.x, ny)) g.y = ny; else g.vy *= -1;
-
-    // hit player
-    if (player.invuln <= 0 &&
-        rectsOverlap(g.x - g.w/2, g.y - g.h/2, g.w, g.h,
-                     player.x - player.w/2, player.y - player.h/2, player.w, player.h)) {
-      player.hp--;
-      player.invuln = 90;
-      // knockback
-      const ang = Math.atan2(player.y - g.y, player.x - g.x);
-      player.x += Math.cos(ang) * 30;
-      player.y += Math.sin(ang) * 30;
-      if (player.hp <= 0) endGame(false);
-    }
-  });
-
-  if (player.invuln > 0) player.invuln -= dt * 60;
-
-  // win check
-  if (collected >= ONIONS_TOTAL &&
-      Math.hypot(fiona.x - player.x, fiona.y - player.y) < 50) {
-    endGame(true);
+  // detect nearby landmark
+  let nearest = null, nearestDist = 90;
+  for (const l of landmarks) {
+    const cx = l.x + l.w / 2;
+    const cy = l.y + l.h / 2;
+    const d = Math.hypot(cx - player.x, cy - player.y);
+    if (d < nearestDist) { nearest = l; nearestDist = d; }
   }
+  if (nearest !== nearLandmark) {
+    nearLandmark = nearest;
+    if (nearest) {
+      showDialog(nearest.dialogTitle, nearest.dialogText);
+      if (['house','outhouse','mudbath'].includes(nearest.id) && !visited.has(nearest.id)) {
+        visited.add(nearest.id);
+        document.getElementById('visited').textContent = visited.size;
+        if (visited.size === 3) {
+          setTimeout(() => {
+            showMessage(
+              '💚 Экскурсия завершена!',
+              `Ты обошёл всё болото Шрека:<br>
+               🏠 Дом, 🚽 туалет, 🛁 грязевая ванна.<br><br>
+               Шрек доволен. Можешь гулять дальше — болото большое.`,
+              'Гулять ещё',
+              () => {}
+            );
+          }, 600);
+        }
+      }
+    } else {
+      hideDialog();
+    }
+  }
+
+  // location label
+  let locName = 'Болото';
+  if (nearLandmark) locName = nearLandmark.name;
+  else if (isMud(player.x, player.y)) locName = 'Грязь';
+  else {
+    const tx = Math.floor(player.x / TILE), ty = Math.floor(player.y / TILE);
+    if (map[ty] && map[ty][tx] === 5) locName = 'Тропинка';
+    if (map[ty] && map[ty][tx] === 3) locName = 'Тростник';
+  }
+  document.getElementById('location').textContent = locName;
+
+  // bugs
+  bugs.forEach(b => {
+    b.t += dt;
+    b.x += Math.cos(b.t * 1.7 + b.hue) * 0.6;
+    b.y += Math.sin(b.t * 1.3 + b.hue) * 0.6;
+    if (b.x < 30) b.x = WORLD_W - 30;
+    if (b.x > WORLD_W - 30) b.x = 30;
+    if (b.y < 30) b.y = WORLD_H - 30;
+    if (b.y > WORLD_H - 30) b.y = 30;
+  });
 
   // camera
-  camera.x = player.x - W/2;
-  camera.y = player.y - H/2;
+  camera.x = player.x - W / 2;
+  camera.y = player.y - H / 2;
   camera.x = Math.max(0, Math.min(WORLD_W - W, camera.x));
   camera.y = Math.max(0, Math.min(WORLD_H - H, camera.y));
-
-  // hud
-  elapsed = (performance.now() - startTime) / 1000;
-  document.getElementById('onions').textContent = collected;
-  document.getElementById('timer').textContent = Math.floor(elapsed);
-  document.getElementById('hp').textContent = '❤️'.repeat(Math.max(0, player.hp));
 }
 
-// ===== DRAW =====
+// ===== DRAWING =====
 function drawTile(t, x, y) {
   switch (t) {
-    case 0: // grass
-      ctx.fillStyle = '#3d5a2b';
+    case 0: // grass (boggy)
+      ctx.fillStyle = '#3a5524';
       ctx.fillRect(x, y, TILE, TILE);
-      // grass tufts
       ctx.fillStyle = '#4d6e35';
-      ctx.fillRect(x+8, y+10, 3, 6);
-      ctx.fillRect(x+22, y+24, 3, 6);
-      ctx.fillRect(x+30, y+8, 3, 6);
+      ctx.fillRect(x + 8, y + 10, 3, 5);
+      ctx.fillRect(x + 22, y + 24, 3, 5);
+      ctx.fillStyle = '#2b3d1a';
+      ctx.fillRect(x + 30, y + 8, 2, 4);
       break;
     case 1: // tree
-      ctx.fillStyle = '#3d5a2b';
+      ctx.fillStyle = '#3a5524';
       ctx.fillRect(x, y, TILE, TILE);
       // trunk
-      ctx.fillStyle = '#5c3a1e';
-      ctx.fillRect(x + TILE/2 - 4, y + TILE - 14, 8, 14);
+      ctx.fillStyle = '#3d2818';
+      ctx.fillRect(x + TILE/2 - 4, y + TILE - 16, 8, 16);
       // foliage
-      ctx.fillStyle = '#1e3a14';
+      ctx.fillStyle = '#1c3210';
       ctx.beginPath();
-      ctx.arc(x + TILE/2, y + TILE/2 - 2, 18, 0, Math.PI*2);
+      ctx.arc(x + TILE/2, y + TILE/2 - 4, 19, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#2d4d1e';
+      ctx.fillStyle = '#2a4a18';
       ctx.beginPath();
-      ctx.arc(x + TILE/2 - 5, y + TILE/2 - 6, 10, 0, Math.PI*2);
+      ctx.arc(x + TILE/2 - 6, y + TILE/2 - 8, 11, 0, Math.PI * 2);
       ctx.fill();
+      // moss
+      ctx.fillStyle = '#5b7a30';
+      ctx.fillRect(x + TILE/2 - 3, y + TILE - 10, 6, 3);
       break;
-    case 2: // water
-      ctx.fillStyle = '#2a4a5e';
+    case 2: { // swamp water
+      ctx.fillStyle = '#2d3e2a';
       ctx.fillRect(x, y, TILE, TILE);
-      ctx.fillStyle = '#3d6a82';
-      const wave = Math.sin((performance.now()/300) + x*0.1) * 2;
-      ctx.fillRect(x + 4, y + 12 + wave, TILE - 8, 3);
-      ctx.fillRect(x + 8, y + 26 - wave, TILE - 16, 3);
+      // greenish algae layer
+      ctx.fillStyle = '#3f5a32';
+      const t1 = performance.now() / 600;
+      ctx.fillRect(x + 4, y + 10 + Math.sin(t1 + x * 0.1) * 2, TILE - 8, 4);
+      ctx.fillRect(x + 8, y + 24 - Math.sin(t1 + x * 0.1) * 2, TILE - 16, 3);
+      // bubble
+      if ((Math.floor(performance.now() / 400) + x + y) % 7 === 0) {
+        ctx.fillStyle = 'rgba(180,220,160,.5)';
+        ctx.beginPath();
+        ctx.arc(x + 12, y + 18, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
       break;
-    case 3: // rock
-      ctx.fillStyle = '#3d5a2b';
+    }
+    case 3: // reeds
+      ctx.fillStyle = '#3a5524';
       ctx.fillRect(x, y, TILE, TILE);
-      ctx.fillStyle = '#7a7a7a';
-      ctx.beginPath();
-      ctx.ellipse(x + TILE/2, y + TILE/2 + 4, 14, 10, 0, 0, Math.PI*2);
-      ctx.fill();
-      ctx.fillStyle = '#9a9a9a';
-      ctx.beginPath();
-      ctx.ellipse(x + TILE/2 - 3, y + TILE/2, 8, 5, 0, 0, Math.PI*2);
-      ctx.fill();
+      ctx.strokeStyle = '#6e8a3a';
+      ctx.lineWidth = 2;
+      const sway = Math.sin(performance.now() / 500 + x * 0.1) * 2;
+      for (let i = 0; i < 4; i++) {
+        const rx = x + 6 + i * 9;
+        ctx.beginPath();
+        ctx.moveTo(rx, y + TILE);
+        ctx.lineTo(rx + sway, y + 8);
+        ctx.stroke();
+      }
+      // tips
+      ctx.fillStyle = '#a8a05a';
+      for (let i = 0; i < 4; i++) {
+        const rx = x + 6 + i * 9 + sway;
+        ctx.fillRect(rx - 1, y + 6, 2, 6);
+      }
       break;
     case 4: // mud
-      ctx.fillStyle = '#5c4628';
+      ctx.fillStyle = '#4a3520';
       ctx.fillRect(x, y, TILE, TILE);
-      ctx.fillStyle = '#3d2e18';
-      ctx.fillRect(x + 6, y + 8, 6, 4);
-      ctx.fillRect(x + 22, y + 22, 8, 4);
+      ctx.fillStyle = '#2e2010';
+      ctx.beginPath(); ctx.ellipse(x + 12, y + 14, 5, 3, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x + 28, y + 26, 6, 4, 0, 0, Math.PI*2); ctx.fill();
+      // bubble
+      const bt = (performance.now()/300 + x + y) % 6;
+      if (bt < 1) {
+        ctx.fillStyle = 'rgba(120,90,50,.7)';
+        ctx.beginPath();
+        ctx.arc(x + 20, y + 18, 2 + bt * 2, 0, Math.PI*2);
+        ctx.fill();
+      }
+      break;
+    case 5: // path (worn dirt)
+      ctx.fillStyle = '#6b5230';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#54401f';
+      ctx.fillRect(x + 6, y + 8, 5, 4);
+      ctx.fillRect(x + 24, y + 22, 6, 3);
+      ctx.fillStyle = '#7a6238';
+      ctx.fillRect(x + 16, y + 14, 4, 3);
+      break;
+    case 6: // mossy stone
+      ctx.fillStyle = '#3a5524';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#7a7068';
+      ctx.beginPath();
+      ctx.ellipse(x + TILE/2, y + TILE/2 + 2, 14, 10, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#5b7a30';
+      ctx.beginPath();
+      ctx.ellipse(x + TILE/2 - 3, y + TILE/2 - 2, 7, 3, 0, 0, Math.PI*2);
+      ctx.fill();
       break;
   }
 }
 
-function drawShrek(sx, sy) {
-  const bob = Math.sin(player.bobFrame) * 2;
-
-  if (shrekImgLoaded) {
-    // Use the real PNG
-    if (player.invuln > 0 && Math.floor(player.invuln / 6) % 2 === 0) {
-      ctx.globalAlpha = 0.4;
-    }
-    const size = 72;
-    // mirror for left direction
-    if (player.dir === 'left') {
-      ctx.save();
-      ctx.scale(-1, 1);
-      ctx.drawImage(shrekImg, -sx - size/2, sy - size/2 + bob, size, size);
-      ctx.restore();
-    } else {
-      ctx.drawImage(shrekImg, sx - size/2, sy - size/2 + bob, size, size);
-    }
-    ctx.globalAlpha = 1;
-    return;
-  }
-
-  // Fallback Shrek (drawn by code)
-  if (player.invuln > 0 && Math.floor(player.invuln / 6) % 2 === 0) {
-    ctx.globalAlpha = 0.4;
-  }
+function drawHouse(l) {
+  const x = l.x - camera.x;
+  const y = l.y - camera.y;
+  const w = l.w, h = l.h;
   // shadow
   ctx.fillStyle = 'rgba(0,0,0,.35)';
   ctx.beginPath();
-  ctx.ellipse(sx, sy + 18, 18, 6, 0, 0, Math.PI*2);
+  ctx.ellipse(x + w/2, y + h - 6, w/2 - 6, 10, 0, 0, Math.PI*2);
   ctx.fill();
 
-  // body (shirt)
-  ctx.fillStyle = '#e8dcc4';
+  // walls (logs)
+  ctx.fillStyle = '#6b4a26';
+  ctx.fillRect(x + 8, y + h * 0.45, w - 16, h * 0.55 - 4);
+  // log lines
+  ctx.strokeStyle = '#4a3018';
+  ctx.lineWidth = 1.5;
+  for (let i = 1; i < 5; i++) {
+    const ly = y + h * 0.45 + i * (h * 0.55 - 4) / 5;
+    ctx.beginPath(); ctx.moveTo(x + 8, ly); ctx.lineTo(x + w - 8, ly); ctx.stroke();
+  }
+  // mossy thatched roof
+  ctx.fillStyle = '#3d5a22';
+  ctx.beginPath();
+  ctx.moveTo(x + 2, y + h * 0.5);
+  ctx.lineTo(x + w / 2, y + 4);
+  ctx.lineTo(x + w - 2, y + h * 0.5);
+  ctx.closePath();
+  ctx.fill();
+  // moss highlights
+  ctx.fillStyle = '#5b7a30';
+  ctx.beginPath();
+  ctx.moveTo(x + 8, y + h * 0.48);
+  ctx.lineTo(x + w / 2 - 4, y + 14);
+  ctx.lineTo(x + w / 2 + 8, y + h * 0.32);
+  ctx.lineTo(x + 18, y + h * 0.48);
+  ctx.closePath();
+  ctx.fill();
+
+  // door
+  ctx.fillStyle = '#3d2818';
+  ctx.fillRect(x + w/2 - 10, y + h - 26, 20, 26);
+  ctx.fillStyle = '#a87a3a';
+  ctx.beginPath(); ctx.arc(x + w/2 + 6, y + h - 13, 1.5, 0, Math.PI*2); ctx.fill();
+  // window
+  ctx.fillStyle = '#2a3a1a';
+  ctx.fillRect(x + 14, y + h * 0.55, 14, 12);
+  ctx.strokeStyle = '#6b4a26';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 14, y + h * 0.55, 14, 12);
+  ctx.beginPath(); ctx.moveTo(x + 21, y + h * 0.55); ctx.lineTo(x + 21, y + h * 0.55 + 12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + 14, y + h * 0.55 + 6); ctx.lineTo(x + 28, y + h * 0.55 + 6); ctx.stroke();
+  // chimney
+  ctx.fillStyle = '#5a4030';
+  ctx.fillRect(x + w - 28, y + 6, 10, 18);
+  // smoke
+  const t = performance.now() / 500;
+  ctx.fillStyle = 'rgba(220,220,220,.55)';
+  for (let i = 0; i < 3; i++) {
+    const sy = y - 6 - i * 10 - (t * 8) % 10;
+    const sx = x + w - 23 + Math.sin(t + i) * 4;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 5 + i, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function drawOuthouse(l) {
+  const x = l.x - camera.x;
+  const y = l.y - camera.y;
+  const w = l.w, h = l.h;
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath();
+  ctx.ellipse(x + w/2, y + h - 4, w/2 - 2, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+  // body
+  ctx.fillStyle = '#7a5530';
+  ctx.fillRect(x + 4, y + 10, w - 8, h - 12);
+  // planks
+  ctx.strokeStyle = '#4a3018';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(x + 4 + i * (w - 8) / 4, y + 10);
+    ctx.lineTo(x + 4 + i * (w - 8) / 4, y + h - 2);
+    ctx.stroke();
+  }
+  // roof
+  ctx.fillStyle = '#3d2818';
+  ctx.beginPath();
+  ctx.moveTo(x, y + 14);
+  ctx.lineTo(x + w / 2, y);
+  ctx.lineTo(x + w, y + 14);
+  ctx.closePath();
+  ctx.fill();
+  // door
+  ctx.fillStyle = '#5a3e22';
+  ctx.fillRect(x + 10, y + 22, w - 20, h - 26);
+  // heart
+  ctx.fillStyle = '#c94a4a';
+  const hx = x + w / 2, hy = y + 32;
+  ctx.beginPath();
+  ctx.arc(hx - 3, hy, 2.5, 0, Math.PI*2);
+  ctx.arc(hx + 3, hy, 2.5, 0, Math.PI*2);
+  ctx.moveTo(hx - 5, hy + 1);
+  ctx.lineTo(hx, hy + 7);
+  ctx.lineTo(hx + 5, hy + 1);
+  ctx.fill();
+  // crescent moon (classic outhouse)
+  ctx.fillStyle = '#f0e090';
+  ctx.beginPath();
+  ctx.arc(x + w/2, y + 18, 4, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#5a3e22';
+  ctx.beginPath();
+  ctx.arc(x + w/2 + 1.5, y + 18, 3, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawMudBath(l) {
+  const x = l.x - camera.x;
+  const y = l.y - camera.y;
+  const w = l.w, h = l.h;
+  // outer ring (dirt)
+  ctx.fillStyle = '#3a2b18';
+  ctx.beginPath();
+  ctx.ellipse(x + w/2, y + h/2, w/2 + 4, h/2 + 2, 0, 0, Math.PI*2);
+  ctx.fill();
+  // mud body
+  ctx.fillStyle = '#5a3e22';
+  ctx.beginPath();
+  ctx.ellipse(x + w/2, y + h/2, w/2 - 4, h/2 - 4, 0, 0, Math.PI*2);
+  ctx.fill();
+  // darker swirls
+  ctx.fillStyle = '#3d2616';
+  ctx.beginPath();
+  ctx.ellipse(x + w/2 - 12, y + h/2 + 4, 16, 6, 0.3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + w/2 + 14, y + h/2 - 6, 12, 5, -0.4, 0, Math.PI*2);
+  ctx.fill();
+  // bubbles
+  const t = performance.now() / 400;
+  for (let i = 0; i < 5; i++) {
+    const bx = x + 16 + i * 18 + Math.sin(t + i) * 4;
+    const by = y + h/2 + Math.cos(t * 1.5 + i * 1.7) * 8;
+    const rad = 2 + ((t + i) % 1.5);
+    ctx.fillStyle = 'rgba(160,120,60,.7)';
+    ctx.beginPath();
+    ctx.arc(bx, by, rad, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(220,200,150,.45)';
+    ctx.beginPath();
+    ctx.arc(bx - rad/3, by - rad/3, rad/3, 0, Math.PI*2);
+    ctx.fill();
+  }
+  // a wooden plank/edge as a "bench"
+  ctx.fillStyle = '#6b4a26';
+  ctx.fillRect(x + 6, y + h - 6, w - 12, 5);
+  ctx.strokeStyle = '#3d2818';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 6, y + h - 6, w - 12, 5);
+  // little rubber duck
+  const dx = x + w/2 + Math.sin(t) * 6;
+  const dy = y + h/2 - 4;
+  ctx.fillStyle = '#f0d040';
+  ctx.beginPath();
+  ctx.ellipse(dx, dy, 6, 4, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(dx + 4, dy - 3, 3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#e8a020';
+  ctx.beginPath();
+  ctx.moveTo(dx + 6, dy - 3);
+  ctx.lineTo(dx + 10, dy - 2);
+  ctx.lineTo(dx + 6, dy - 1);
+  ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.fillRect(dx + 4, dy - 4, 1, 1);
+}
+
+function drawSign(l) {
+  const x = l.x - camera.x;
+  const y = l.y - camera.y;
+  const w = l.w, h = l.h;
+  // post
+  ctx.fillStyle = '#5a3e22';
+  ctx.fillRect(x + w/2 - 2, y + 16, 4, h - 16);
+  // board
+  ctx.fillStyle = '#8a6038';
+  ctx.fillRect(x + 2, y + 4, w - 4, 22);
+  ctx.strokeStyle = '#3d2818';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x + 2, y + 4, w - 4, 22);
+  // text marks
+  ctx.fillStyle = '#3d2818';
+  ctx.fillRect(x + 6, y + 9, w - 12, 1.5);
+  ctx.fillRect(x + 6, y + 14, w - 16, 1.5);
+  ctx.fillRect(x + 6, y + 19, w - 10, 1.5);
+}
+
+function drawShrek(sx, sy) {
+  const bob = player.moving ? Math.sin(player.bobFrame) * 2 : 0;
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + 20, 18, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // legs (brown pants)
+  ctx.fillStyle = '#5a3e22';
+  ctx.fillRect(sx - 9, sy + 10 + bob * 0.5, 7, 12);
+  ctx.fillRect(sx + 2, sy + 10 - bob * 0.5, 7, 12);
+
+  // body (cream tunic)
+  ctx.fillStyle = '#dcc89a';
   ctx.beginPath();
   ctx.ellipse(sx, sy + 6 + bob, 16, 14, 0, 0, Math.PI*2);
   ctx.fill();
-  // vest
-  ctx.fillStyle = '#5c3a1e';
-  ctx.fillRect(sx - 14, sy - 2 + bob, 8, 14);
-  ctx.fillRect(sx + 6, sy - 2 + bob, 8, 14);
+  // brown vest sides
+  ctx.fillStyle = '#5a3e22';
+  ctx.fillRect(sx - 14, sy - 2 + bob, 7, 14);
+  ctx.fillRect(sx + 7, sy - 2 + bob, 7, 14);
+  // belt
+  ctx.fillStyle = '#3d2818';
+  ctx.fillRect(sx - 14, sy + 10 + bob, 28, 3);
 
-  // head (green)
+  // arms
   ctx.fillStyle = '#7ba24a';
   ctx.beginPath();
-  ctx.arc(sx, sy - 10 + bob, 14, 0, Math.PI*2);
+  ctx.ellipse(sx - 16, sy + 4 + bob, 4, 7, 0.3, 0, Math.PI*2);
   ctx.fill();
-  // ears (trumpet)
+  ctx.beginPath();
+  ctx.ellipse(sx + 16, sy + 4 + bob, 4, 7, -0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  // head (big green)
   ctx.fillStyle = '#7ba24a';
   ctx.beginPath();
-  ctx.ellipse(sx - 14, sy - 10 + bob, 5, 3, -0.3, 0, Math.PI*2);
+  ctx.ellipse(sx, sy - 12 + bob, 15, 13, 0, 0, Math.PI*2);
+  ctx.fill();
+  // head shading
+  ctx.fillStyle = '#6a8e3c';
+  ctx.beginPath();
+  ctx.ellipse(sx + 4, sy - 10 + bob, 10, 9, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // trumpet ears
+  ctx.fillStyle = '#7ba24a';
+  ctx.beginPath();
+  ctx.moveTo(sx - 14, sy - 14 + bob);
+  ctx.lineTo(sx - 22, sy - 18 + bob);
+  ctx.lineTo(sx - 22, sy - 10 + bob);
+  ctx.lineTo(sx - 14, sy - 8 + bob);
+  ctx.closePath();
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(sx + 14, sy - 10 + bob, 5, 3, 0.3, 0, Math.PI*2);
+  ctx.moveTo(sx + 14, sy - 14 + bob);
+  ctx.lineTo(sx + 22, sy - 18 + bob);
+  ctx.lineTo(sx + 22, sy - 10 + bob);
+  ctx.lineTo(sx + 14, sy - 8 + bob);
+  ctx.closePath();
   ctx.fill();
+  // ear holes
+  ctx.fillStyle = '#3d5a18';
+  ctx.beginPath(); ctx.arc(sx - 19, sy - 14 + bob, 1.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(sx + 19, sy - 14 + bob, 1.5, 0, Math.PI*2); ctx.fill();
+
+  // brow
+  ctx.fillStyle = '#3d5a18';
+  ctx.fillRect(sx - 9, sy - 17 + bob, 6, 2);
+  ctx.fillRect(sx + 3, sy - 17 + bob, 6, 2);
+
   // eyes
   ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(sx - 5, sy - 12 + bob, 3, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(sx + 5, sy - 12 + bob, 3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(sx - 5, sy - 13 + bob, 3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(sx + 5, sy - 13 + bob, 3, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#000';
   const eyeOffX = player.dir === 'left' ? -1 : player.dir === 'right' ? 1 : 0;
   const eyeOffY = player.dir === 'up' ? -1 : player.dir === 'down' ? 1 : 0;
-  ctx.beginPath(); ctx.arc(sx - 5 + eyeOffX, sy - 12 + eyeOffY + bob, 1.5, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(sx + 5 + eyeOffX, sy - 12 + eyeOffY + bob, 1.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(sx - 5 + eyeOffX, sy - 13 + eyeOffY + bob, 1.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(sx + 5 + eyeOffX, sy - 13 + eyeOffY + bob, 1.5, 0, Math.PI*2); ctx.fill();
+
+  // nose (огры — большой нос)
+  ctx.fillStyle = '#6a8e3c';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy - 8 + bob, 3, 2.5, 0, 0, Math.PI*2);
+  ctx.fill();
+
   // mouth
-  ctx.strokeStyle = '#3d2618';
+  ctx.strokeStyle = '#2a1a10';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(sx, sy - 6 + bob, 4, 0.2, Math.PI - 0.2);
+  ctx.arc(sx, sy - 4 + bob, 4, 0.2, Math.PI - 0.2);
   ctx.stroke();
-
-  ctx.globalAlpha = 1;
+  // tooth
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(sx - 2, sy - 3 + bob, 1.5, 2);
 }
 
-function drawOnion(o) {
-  if (o.collected) return;
-  const x = o.x - camera.x;
-  const y = o.y - camera.y + Math.sin(o.bob) * 3;
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,.3)';
-  ctx.beginPath();
-  ctx.ellipse(x, y + 14, 8, 3, 0, 0, Math.PI*2);
-  ctx.fill();
-  // bulb
-  ctx.fillStyle = '#e8c89a';
-  ctx.beginPath();
-  ctx.ellipse(x, y, 8, 10, 0, 0, Math.PI*2);
-  ctx.fill();
-  // stripes
-  ctx.strokeStyle = '#a08560';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(x - 6, y - 2); ctx.quadraticCurveTo(x, y + 4, x + 6, y - 2); ctx.stroke();
-  // green sprout
-  ctx.fillStyle = '#5c8a3a';
-  ctx.fillRect(x - 1, y - 14, 2, 6);
-  ctx.fillStyle = '#7ba24a';
-  ctx.beginPath();
-  ctx.ellipse(x - 3, y - 13, 3, 1.5, -0.5, 0, Math.PI*2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(x + 3, y - 13, 3, 1.5, 0.5, 0, Math.PI*2);
-  ctx.fill();
-}
-
-function drawGuard(g) {
-  const x = g.x - camera.x;
-  const y = g.y - camera.y;
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,.3)';
-  ctx.beginPath();
-  ctx.ellipse(x, y + 14, 12, 4, 0, 0, Math.PI*2);
-  ctx.fill();
-  // body (red tunic)
-  ctx.fillStyle = '#a83232';
-  ctx.fillRect(x - 10, y - 4, 20, 16);
-  // head
-  ctx.fillStyle = '#e8b890';
-  ctx.beginPath();
-  ctx.arc(x, y - 10, 8, 0, Math.PI*2);
-  ctx.fill();
-  // helmet
-  ctx.fillStyle = '#888';
-  ctx.beginPath();
-  ctx.arc(x, y - 12, 9, Math.PI, 0);
-  ctx.fill();
-  ctx.fillRect(x - 9, y - 13, 18, 3);
-  // angry eyes
-  ctx.fillStyle = '#000';
-  ctx.fillRect(x - 4, y - 9, 2, 2);
-  ctx.fillRect(x + 2, y - 9, 2, 2);
-  // spear
-  ctx.strokeStyle = '#5c3a1e';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(x + 12, y - 18);
-  ctx.lineTo(x + 12, y + 14);
-  ctx.stroke();
-  ctx.fillStyle = '#aaa';
-  ctx.beginPath();
-  ctx.moveTo(x + 12, y - 22);
-  ctx.lineTo(x + 8, y - 16);
-  ctx.lineTo(x + 16, y - 16);
-  ctx.fill();
-}
-
-function drawFiona() {
-  const x = fiona.x - camera.x;
-  const y = fiona.y - camera.y;
-  const bob = Math.sin(performance.now() / 300) * 2;
-  // sparkle ring (signaling final point)
-  ctx.strokeStyle = collected >= ONIONS_TOTAL ? '#ffe066' : '#888';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([4, 4]);
-  ctx.beginPath();
-  ctx.arc(x, y, 30, 0, Math.PI*2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,.3)';
-  ctx.beginPath();
-  ctx.ellipse(x, y + 18, 14, 4, 0, 0, Math.PI*2);
-  ctx.fill();
-  // dress
-  ctx.fillStyle = '#4a8a3a';
-  ctx.beginPath();
-  ctx.moveTo(x - 12, y + 14 + bob);
-  ctx.lineTo(x - 8, y - 4 + bob);
-  ctx.lineTo(x + 8, y - 4 + bob);
-  ctx.lineTo(x + 12, y + 14 + bob);
-  ctx.closePath();
-  ctx.fill();
-  // head
-  ctx.fillStyle = '#ffd9b3';
-  ctx.beginPath();
-  ctx.arc(x, y - 10 + bob, 9, 0, Math.PI*2);
-  ctx.fill();
-  // red hair
-  ctx.fillStyle = '#c84a1e';
-  ctx.beginPath();
-  ctx.arc(x, y - 14 + bob, 10, Math.PI, 0);
-  ctx.fill();
-  ctx.fillRect(x - 10, y - 14 + bob, 4, 14);
-  ctx.fillRect(x + 6, y - 14 + bob, 4, 14);
-  // eyes
-  ctx.fillStyle = '#000';
-  ctx.fillRect(x - 4, y - 10 + bob, 1.5, 2);
-  ctx.fillRect(x + 3, y - 10 + bob, 1.5, 2);
-  // smile
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.arc(x, y - 7 + bob, 2, 0, Math.PI);
-  ctx.stroke();
-  // hint label
-  if (collected < ONIONS_TOTAL) {
-    ctx.fillStyle = 'rgba(0,0,0,.7)';
-    ctx.fillRect(x - 70, y - 38, 140, 18);
-    ctx.fillStyle = '#fff';
-    ctx.font = '12px Trebuchet MS';
-    ctx.textAlign = 'center';
-    ctx.fillText('Собери все луковицы! 🧅', x, y - 25);
-  } else {
-    ctx.fillStyle = 'rgba(255, 224, 102, .9)';
-    ctx.fillRect(x - 50, y - 38, 100, 18);
+function drawBug(b) {
+  const x = b.x - camera.x;
+  const y = b.y - camera.y;
+  if (x < -20 || y < -20 || x > W + 20 || y > H + 20) return;
+  if (b.kind === 'butterfly') {
+    const flap = Math.sin(b.t * 14) * 3;
+    ctx.fillStyle = `hsl(${b.hue}, 70%, 65%)`;
+    ctx.beginPath(); ctx.ellipse(x - 3, y, 3, 4 - flap * 0.3, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 3, y, 3, 4 - flap * 0.3, 0, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#000';
-    ctx.font = 'bold 12px Trebuchet MS';
-    ctx.textAlign = 'center';
-    ctx.fillText('Подойди ко мне! 💚', x, y - 25);
+    ctx.fillRect(x - 0.5, y - 2, 1, 4);
+  } else {
+    // dragonfly
+    ctx.fillStyle = 'rgba(180,220,255,.7)';
+    const flap = Math.sin(b.t * 18) * 2;
+    ctx.beginPath(); ctx.ellipse(x - 4, y - 1, 4, 1.2 + flap * 0.2, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 4, y - 1, 4, 1.2 + flap * 0.2, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#3a8a5a';
+    ctx.fillRect(x - 0.5, y - 1, 1.5, 6);
   }
 }
 
 function draw() {
   ctx.clearRect(0, 0, W, H);
 
-  // tiles in viewport
+  // tiles
   const x0 = Math.max(0, Math.floor(camera.x / TILE));
   const y0 = Math.max(0, Math.floor(camera.y / TILE));
   const x1 = Math.min(MAP_W, Math.ceil((camera.x + W) / TILE));
@@ -705,16 +971,50 @@ function draw() {
     }
   }
 
-  // entities
-  onions.forEach(drawOnion);
-  drawFiona();
-  guards.forEach(drawGuard);
-
+  // landmarks (sorted by Y for nice overlap)
+  const sortedL = [...landmarks].sort((a, b) => (a.y + a.h) - (b.y + b.h));
+  // draw landmarks split by whether the player is in front or behind
+  const playerBaseY = player.y;
+  // pass 1: behind
+  sortedL.forEach(l => {
+    if (l.y + l.h <= playerBaseY) drawLandmark(l);
+  });
+  // bugs (mid layer)
+  bugs.forEach(drawBug);
   // player
   drawShrek(player.x - camera.x, player.y - camera.y);
+  // pass 2: in front
+  sortedL.forEach(l => {
+    if (l.y + l.h > playerBaseY) drawLandmark(l);
+  });
+
+  // gentle vignette
+  const grd = ctx.createRadialGradient(W/2, H/2, Math.min(W, H) * 0.4, W/2, H/2, Math.max(W, H) * 0.7);
+  grd.addColorStop(0, 'rgba(0,0,0,0)');
+  grd.addColorStop(1, 'rgba(0,0,0,.45)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
 }
 
-// ===== GAME FLOW =====
+function drawLandmark(l) {
+  switch (l.id) {
+    case 'house': drawHouse(l); break;
+    case 'outhouse': drawOuthouse(l); break;
+    case 'mudbath': drawMudBath(l); break;
+    case 'sign': drawSign(l); break;
+  }
+}
+
+// ===== UI =====
+function showDialog(title, text) {
+  document.getElementById('dlg-title').textContent = title;
+  document.getElementById('dlg-text').innerHTML = text;
+  document.getElementById('dialog').style.display = 'block';
+}
+function hideDialog() {
+  document.getElementById('dialog').style.display = 'none';
+}
+
 function showMessage(title, text, btnLabel, onClick) {
   const m = document.getElementById('message');
   document.getElementById('msg-title').textContent = title;
@@ -728,48 +1028,17 @@ function showMessage(title, text, btnLabel, onClick) {
   m.style.display = 'block';
 }
 
-function startGame() {
+// ===== START =====
+function startTour() {
   generateMap();
-  setupEntities();
-  player.x = 15 * TILE;
-  player.y = 10 * TILE;
-  player.hp = 3;
-  player.invuln = 0;
-  collected = 0;
-  startTime = performance.now();
-  gameRunning = true;
-  gameWon = false;
+  spawnBugs();
+  player.x = 16.5 * TILE;
+  player.y = 11.5 * TILE;
+  visited = new Set();
+  document.getElementById('visited').textContent = '0';
+  timeStart = performance.now();
 }
 
-function endGame(won) {
-  gameRunning = false;
-  gameWon = won;
-  const t = Math.floor(elapsed);
-  if (won) {
-    const best = +(localStorage.getItem('shrek-best') || 9999);
-    if (t < best) localStorage.setItem('shrek-best', t);
-    const bestNow = localStorage.getItem('shrek-best');
-    showMessage(
-      '💚 Шрек нашёл Фиону!',
-      `Ты собрал все луковицы и спас принцессу! 🎉<br><br>
-       Время: <b>${t}с</b><br>
-       Лучший рекорд: <b>${bestNow}с</b>`,
-      'Сыграть снова',
-      startGame
-    );
-  } else {
-    showMessage(
-      '💀 Шрека поймала стража!',
-      `Стражники Фаркуада оказались сильнее...<br><br>
-       Луковиц собрано: <b>${collected}/${ONIONS_TOTAL}</b><br>
-       Время: <b>${t}с</b>`,
-      'Попробовать снова',
-      startGame
-    );
-  }
-}
-
-// ===== MAIN LOOP =====
 let lastT = performance.now();
 function loop() {
   const now = performance.now();
@@ -780,23 +1049,24 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
-// ===== START =====
 showMessage(
-  '🟢 Shrek\'s Swamp Adventure',
-  `Помоги Шреку найти Фиону на болоте!<br><br>
-   🧅 Собери все <b>10 луковиц</b><br>
-   🛡️ Не попадайся <b>стражникам Фаркуада</b><br>
-   👸 Подойди к <b>Фионе</b>, когда соберёшь всё<br><br>
+  '🟢 Болото Шрека',
+  `Добро пожаловать на болото! Это твоя <b>экскурсия</b>.<br><br>
+   Здесь живёт один Шрек. Найди и осмотри все 3 места:<br>
+   🏠 <b>Дом Шрека</b><br>
+   🚽 <b>Уличный туалет</b><br>
+   🛁 <b>Грязевую ванну</b><br><br>
    <b>Управление:</b><br>
    💻 WASD или стрелки<br>
-   📱 Джойстик внизу слева`,
-  'Начать! 💚',
-  startGame
+   📱 Джойстик внизу слева<br><br>
+   Просто гуляй и наслаждайся!`,
+  'В путь! 💚',
+  startTour
 );
 
 loop();
 
-// resize handling: fit canvas to window keeping aspect
+// resize
 function fit() {
   const wrap = document.getElementById('game-wrap');
   const ratio = W / H;

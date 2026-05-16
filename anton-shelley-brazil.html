@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Anton & Shelley — Бразилия</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: linear-gradient(180deg, #1a3a6e 0%, #2a5a9e 100%);
+    font-family: 'Trebuchet MS', sans-serif;
+    color: #fff;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  #game-wrap {
+    position: relative;
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  canvas {
+    background: #4a8c4a;
+    display: block;
+    image-rendering: pixelated;
+    box-shadow: 0 0 40px rgba(0,0,0,.6);
+    max-width: 100%;
+    max-height: 100%;
+  }
+  #hud {
+    position: absolute;
+    top: 12px; left: 12px;
+    background: rgba(0,40,20,.7);
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 15px;
+    line-height: 1.5;
+    border: 2px solid #ffdf00;
+    pointer-events: none;
+    max-width: 320px;
+    box-shadow: 0 0 14px rgba(255,223,0,.25);
+  }
+  #hud b { color: #ffdf00; }
+  #hud .heart { color: #ff5577; }
+  #title-bar {
+    position: absolute;
+    top: 12px; right: 12px;
+    background: rgba(0,40,20,.7);
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 2px solid #ffdf00;
+    font-size: 14px;
+    pointer-events: none;
+  }
+  #title-bar b { color: #ffdf00; }
+  #dialog {
+    position: absolute;
+    bottom: 30px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(10, 50, 25, .95);
+    border: 4px solid #ffdf00;
+    border-radius: 18px;
+    padding: 16px 24px;
+    text-align: center;
+    font-size: 17px;
+    max-width: 80%;
+    min-width: 320px;
+    display: none;
+    z-index: 8;
+    box-shadow: 0 0 30px rgba(255,223,0, .35);
+  }
+  #dialog h2 {
+    color: #ffdf00;
+    font-size: 21px;
+    margin-bottom: 6px;
+    text-shadow: 2px 2px 0 #000;
+  }
+  #floating {
+    position: absolute;
+    pointer-events: none;
+    color: #ff5577;
+    font-size: 28px;
+    font-weight: bold;
+    text-shadow: 0 0 8px #fff, 2px 2px 0 #000;
+    z-index: 9;
+    transition: transform 1.2s linear, opacity 1.2s linear;
+  }
+
+  /* Action bar */
+  #actions {
+    position: absolute;
+    bottom: 30px; right: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 6;
+  }
+  .act-btn {
+    background: rgba(10, 50, 25, .9);
+    color: #fff;
+    border: 3px solid #ffdf00;
+    border-radius: 50px;
+    padding: 12px 20px;
+    font-size: 15px;
+    font-weight: bold;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 180px;
+    text-align: center;
+    box-shadow: 0 4px 0 rgba(0,0,0,.4);
+    transition: transform .08s, background .12s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(255,223,0,.4);
+  }
+  .act-btn:active, .act-btn.pressed {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 rgba(0,0,0,.4);
+    background: rgba(255,223,0, .85);
+    color: #102015;
+  }
+  .act-btn:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+  }
+  .act-btn .ico { margin-right: 6px; }
+
+  #joystick {
+    position: absolute;
+    bottom: 30px; left: 30px;
+    width: 130px; height: 130px;
+    background: rgba(0,0,0,.3);
+    border: 3px solid rgba(255,255,255,.4);
+    border-radius: 50%;
+    z-index: 5;
+    touch-action: none;
+  }
+  #stick {
+    position: absolute;
+    width: 60px; height: 60px;
+    background: rgba(255, 223, 0, .8);
+    border: 2px solid #fff;
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  #message {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(10, 50, 25, .96);
+    border: 4px solid #ffdf00;
+    border-radius: 18px;
+    padding: 26px 32px;
+    text-align: center;
+    font-size: 17px;
+    max-width: 90%;
+    z-index: 10;
+    box-shadow: 0 0 30px rgba(255,223,0,.4);
+  }
+  #message h1 {
+    color: #ffdf00;
+    font-size: 28px;
+    margin-bottom: 12px;
+    text-shadow: 2px 2px 0 #000;
+  }
+  #message p { line-height: 1.55; margin-bottom: 8px; }
+  #message .key {
+    background: #1a1a1a; padding: 2px 8px; border-radius: 4px;
+    color: #ffdf00; border: 1px solid #ffdf00; font-family: monospace;
+  }
+  #message button {
+    margin-top: 18px;
+    padding: 12px 28px;
+    font-size: 18px;
+    background: #ffdf00;
+    color: #1a3a1a;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    font-family: inherit;
+  }
+  #message button:hover { background: #fff080; }
+  #message.hidden { display: none; }
+
+  @media (max-width: 768px), (pointer: coarse) {
+    #hud { font-size: 12px; padding: 8px 10px; max-width: 220px; }
+    #title-bar { font-size: 12px; }
+    #dialog { font-size: 14px; padding: 12px 16px; bottom: 200px; }
+    .act-btn { min-width: 150px; padding: 10px 14px; font-size: 13px; }
+    #actions { bottom: 30px; right: 20px; gap: 8px; }
+    #joystick { width: 110px; height: 110px; bottom: 24px; left: 20px; }
+    #stick { width: 52px; height: 52px; }
+    #message { padding: 18px 22px; font-size: 14px; }
+    #message h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <canvas id="game" width="960" height="640"></canvas>
+
+  <div id="hud">
+    🇧🇷 <b>Бразилия с Shelley</b><br>
+    <span class="heart">💕 Любовь:</span> <b><span id="love">0</span></b><br>
+    Найдено мест: <b><span id="visited">0</span> / 5</b>
+  </div>
+
+  <div id="title-bar">
+    📍 <b><span id="location">Пляж Копакабана</span></b>
+  </div>
+
+  <div id="dialog">
+    <h2 id="dlg-title"></h2>
+    <div id="dlg-text"></div>
+  </div>
+
+  <div id="actions">
+    <button class="act-btn" id="btnHand">✋ Взять за руку</button>
+    <button class="act-btn" id="btnHug">🤗 Обнять</button>
+    <button class="act-btn" id="btnKiss">💋 Поцеловать</button>
+    <button class="act-btn" id="btnCarry">🙆 На руки</button>
+  </div>
+
+  <div id="joystick">
+    <div id="stick"></div>
+  </div>
+
+  <div id="message">
+    <h1>🇧🇷 Anton & Shelley в Бразилии</h1>
+    <p>Anton приехал в Бразилию вместе с Shelley. Гуляйте по солнечной стране, любуйтесь её достопримечательностями и не забывайте проявлять нежность к любимой!</p>
+    <p style="color:#ffdf00;font-weight:bold">Управление:</p>
+    <p>
+      <span class="key">W A S D</span> или <span class="key">←↑↓→</span> — ходить<br>
+      <span class="key">H</span> — взять за руку &nbsp;
+      <span class="key">G</span> — обнять<br>
+      <span class="key">K</span> — поцеловать &nbsp;
+      <span class="key">C</span> — взять на руки
+    </p>
+    <p style="color:#ffdf00;font-size:13px">📱 На телефоне: джойстик слева, кнопки нежности справа</p>
+    <button id="msg-btn">Vamos! Поехали 🇧🇷</button>
+  </div>
+</div>
+
+<script>
+// ==================== SETUP ====================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = canvas.width, H = canvas.height;
+
+function resizeCanvas() {
+  const wrap = document.getElementById('game-wrap');
+  const rect = wrap.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const aspect = 3 / 2;
+  let cw = rect.width, ch = rect.height;
+  if (cw / ch > aspect) cw = ch * aspect; else ch = cw / aspect;
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
+  canvas.width = Math.floor(cw * dpr);
+  canvas.height = Math.floor(ch * dpr);
+  W = canvas.width; H = canvas.height;
+}
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
+resizeCanvas();
+
+// ==================== WORLD ====================
+const TILE = 40;
+const MAP_W = 40, MAP_H = 28;
+const WORLD_W = MAP_W * TILE;
+const WORLD_H = MAP_H * TILE;
+
+// Tile types:
+// 0 grass, 1 palm, 2 ocean, 3 sand, 4 path, 5 jungle-bush, 6 stone, 7 sidewalk, 8 flower
+const map = [];
+const landmarks = [];
+
+function generateMap() {
+  for (let y = 0; y < MAP_H; y++) {
+    map[y] = [];
+    for (let x = 0; x < MAP_W; x++) {
+      // Default: jungle grass
+      let t = 0;
+      // Forest border
+      if (x < 2 || y < 2 || x >= MAP_W - 2 || y >= MAP_H - 2) {
+        t = (Math.random() < 0.7) ? 1 : 0;
+      } else {
+        const r = Math.random();
+        if (r < 0.04) t = 1;       // palm
+        else if (r < 0.08) t = 5;  // jungle bush
+        else if (r < 0.10) t = 8;  // tropical flower
+        else t = 0;
+      }
+      map[y][x] = t;
+    }
+  }
+
+  // Big ocean strip on the south (Copacabana beach)
+  for (let y = 22; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      if (y >= 24) map[y][x] = 2; // water
+      else map[y][x] = 3;         // sand
+    }
+  }
+  // Sand transition wider near beach
+  for (let x = 0; x < MAP_W; x++) {
+    map[21][x] = 3;
+    map[22][x] = 3;
+    map[23][x] = 3;
+  }
+  // Wavy water/sand line
+  for (let x = 0; x < MAP_W; x++) {
+    const w = Math.floor(Math.sin(x * 0.4) * 1);
+    if (w > 0) map[24][x] = 3;
+    if (w < 0 && map[23] && map[23][x] !== undefined) map[23][x] = 2;
+  }
+
+  // City sidewalks/roads (Rio downtown)
+  for (let y = 6; y <= 8; y++)
+    for (let x = 4; x < 18; x++) map[y][x] = 7;
+  for (let x = 10; x <= 12; x++)
+    for (let y = 8; y < 18; y++) map[y][x] = 7;
+
+  // Path from city to beach
+  for (let y = 8; y <= 21; y++) map[y][20] = 4;
+  for (let x = 20; x < 30; x++) map[15][x] = 4;
+  for (let y = 15; y <= 21; y++) map[y][30] = 4;
+
+  // Mountain area for Christ statue (top right)
+  for (let y = 2; y < 8; y++)
+    for (let x = 28; x < 38; x++) {
+      const dx = x - 33, dy = y - 5;
+      const d = Math.hypot(dx, dy * 1.2);
+      if (d < 4.5) map[y][x] = 6; // stone
+    }
+
+  // Define landmarks
+  landmarks.length = 0;
+  landmarks.push({
+    id: 'christ',
+    name: 'Статуя Христа-Искупителя',
+    x: 32 * TILE, y: 2 * TILE,
+    w: 3 * TILE, h: 5 * TILE,
+    solidPad: 8,
+    type: 'christ',
+    dialogTitle: '⛰️ Christ Redeemer',
+    dialogText: 'Огромная статуя Христа-Искупителя возвышается над Рио. Shelley смотрит вверх, прижимаясь к плечу Anton: «Это просто невероятно...»'
+  });
+  landmarks.push({
+    id: 'sugarloaf',
+    name: 'Сахарная голова',
+    x: 4 * TILE, y: 3 * TILE,
+    w: 3 * TILE, h: 3 * TILE,
+    solidPad: 6,
+    type: 'sugarloaf',
+    dialogTitle: '🏔️ Pão de Açúcar',
+    dialogText: 'Гора Сахарная Голова сверкает на солнце. Канатная дорога медленно ползёт вверх. «Поднимемся туда, Anton?» — спрашивает Shelley с улыбкой.'
+  });
+  landmarks.push({
+    id: 'maracana',
+    name: 'Стадион Маракана',
+    x: 22 * TILE, y: 9 * TILE,
+    w: 5 * TILE, h: 3 * TILE,
+    solidPad: 8,
+    type: 'maracana',
+    dialogTitle: '⚽ Estádio Maracanã',
+    dialogText: 'Знаменитый стадион Маракана. С трибун доносится «Goooool!» Shelley смеётся: «Anton, давай сюда на матч однажды!»'
+  });
+  landmarks.push({
+    id: 'cafe',
+    name: 'Кафе Caipirinha',
+    x: 14 * TILE, y: 10 * TILE,
+    w: 3 * TILE, h: 2 * TILE,
+    solidPad: 6,
+    type: 'cafe',
+    dialogTitle: '☕ Café Brasileiro',
+    dialogText: 'Уютное бразильское кафе. Пахнет свежим кофе и пау-де-кейжу. Shelley заказывает caipirinha и подмигивает: «За нас, querido!»'
+  });
+  landmarks.push({
+    id: 'beach',
+    name: 'Пляж Копакабана',
+    x: 18 * TILE, y: 22 * TILE,
+    w: 4 * TILE, h: 1 * TILE,
+    solidPad: -10, // walkable
+    type: 'beach',
+    dialogTitle: '🏖️ Praia de Copacabana',
+    dialogText: 'Знаменитый пляж Копакабана. Тёплый песок, синий океан и звуки самбы. Shelley босиком бежит к воде, обернувшись: «Догоняй, Anton!»'
+  });
+  // Big Brazilian flag in the center of the country
+  landmarks.push({
+    id: 'flag',
+    name: 'Флаг Бразилии',
+    x: 19 * TILE, y: 12 * TILE,
+    w: 2 * TILE, h: 3 * TILE,
+    solidPad: 4,
+    type: 'flag',
+    dialogTitle: '🇧🇷 Bandeira do Brasil',
+    dialogText: 'Огромный флаг Бразилии гордо развевается на ветру. Зелёное поле, жёлтый ромб, синий круг с белыми звёздами и лента «Ordem e Progresso». Anton и Shelley молча любуются.'
+  });
+}
+
+generateMap();
+
+// ==================== ENTITIES ====================
+const anton = {
+  x: 12 * TILE, y: 18 * TILE,
+  w: 28, h: 36,
+  speed: 2.6,
+  dir: 'down',
+  bobFrame: 0,
+  moving: false
+};
+
+// Shelley follows Anton
+const shelley = {
+  x: 13.5 * TILE, y: 18 * TILE,
+  w: 26, h: 34,
+  speed: 2.6,
+  dir: 'down',
+  bobFrame: 0,
+  moving: false,
+  // when held, position is overridden
+};
+
+const state = {
+  holdingHand: false,
+  hugging: 0,    // frames remaining for hug animation
+  kissing: 0,    // frames remaining for kiss
+  carrying: false,
+  love: 0,
+  visited: new Set(),
+  pendingMsg: '',
+  msgTimer: 0,
+};
+
+let camera = { x: 0, y: 0 };
+let nearLandmark = null;
+let lastNearLandmarkId = null;
+
+// Floating hearts
+const hearts = [];
+function spawnHeart(x, y, txt = '💕') {
+  const el = document.createElement('div');
+  el.id = 'floating';
+  el.textContent = txt;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  document.getElementById('game-wrap').appendChild(el);
+  requestAnimationFrame(() => {
+    el.style.transform = 'translate(-50%, -120px) scale(1.4)';
+    el.style.opacity = '0';
+  });
+  setTimeout(() => el.remove(), 1300);
+}
+
+// Birds (parrots)
+const birds = [];
+for (let i = 0; i < 8; i++) {
+  birds.push({
+    x: Math.random() * WORLD_W,
+    y: Math.random() * (WORLD_H - 400) + 50,
+    t: Math.random() * 1000,
+    hue: [0, 60, 120, 200][Math.floor(Math.random() * 4)],
+    spd: 0.3 + Math.random() * 0.6,
+  });
+}
+
+// ==================== INPUT ====================
+const keys = {};
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  keys[k] = true;
+  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
+  if (k === 'h') doHoldHand();
+  if (k === 'g') doHug();
+  if (k === 'k') doKiss();
+  if (k === 'c') doCarry();
+}, { passive: false });
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+// joystick
+const joystick = document.getElementById('joystick');
+const stick = document.getElementById('stick');
+let joyActive = false;
+let joyDX = 0, joyDY = 0;
+const JOY_R = 55;
+function joyStart(e) { e.preventDefault(); joyActive = true; joyMove(e); }
+function joyMove(e) {
+  if (!joyActive) return;
+  e.preventDefault();
+  const t = e.touches ? e.touches[0] : e;
+  const r = joystick.getBoundingClientRect();
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+  let dx = t.clientX - cx, dy = t.clientY - cy;
+  const dist = Math.hypot(dx, dy);
+  if (dist > JOY_R) { dx = dx/dist*JOY_R; dy = dy/dist*JOY_R; }
+  stick.style.left = (50 + dx/JOY_R*30) + '%';
+  stick.style.top  = (50 + dy/JOY_R*30) + '%';
+  joyDX = dx / JOY_R; joyDY = dy / JOY_R;
+}
+function joyEnd() {
+  joyActive = false; joyDX = joyDY = 0;
+  stick.style.left = '50%'; stick.style.top = '50%';
+}
+joystick.addEventListener('touchstart', joyStart, { passive: false });
+joystick.addEventListener('touchmove', joyMove, { passive: false });
+joystick.addEventListener('touchend', joyEnd);
+joystick.addEventListener('touchcancel', joyEnd);
+joystick.addEventListener('mousedown', joyStart);
+window.addEventListener('mousemove', joyMove);
+window.addEventListener('mouseup', joyEnd);
+
+// Action buttons
+document.getElementById('btnHand').onclick = doHoldHand;
+document.getElementById('btnHug').onclick = doHug;
+document.getElementById('btnKiss').onclick = doKiss;
+document.getElementById('btnCarry').onclick = doCarry;
+
+// ==================== ACTIONS ====================
+function flashDialog(title, text, ms = 2500) {
+  const dlg = document.getElementById('dialog');
+  document.getElementById('dlg-title').textContent = title;
+  document.getElementById('dlg-text').innerHTML = text;
+  dlg.style.display = 'block';
+  clearTimeout(flashDialog._t);
+  flashDialog._t = setTimeout(() => dlg.style.display = 'none', ms);
+}
+
+function getScreenPos(ent) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = rect.width / canvas.width;
+  const scaleY = rect.height / canvas.height;
+  return {
+    x: rect.left + (ent.x - camera.x) * scaleX,
+    y: rect.top + (ent.y - camera.y) * scaleY,
+  };
+}
+
+function doHoldHand() {
+  state.holdingHand = !state.holdingHand;
+  if (state.holdingHand) {
+    state.love += 1;
+    flashDialog('✋ За руку', 'Anton берёт Shelley за руку. «Я с тобой, querida.»');
+    const p = getScreenPos(shelley);
+    spawnHeart(p.x, p.y - 20, '💕');
+  } else {
+    flashDialog('✋ Отпустил руку', 'Shelley игриво отстраняется и идёт сама.');
+  }
+  updateHud();
+}
+
+function doHug() {
+  if (state.carrying) return;
+  if (Math.hypot(anton.x - shelley.x, anton.y - shelley.y) > 80) {
+    flashDialog('🤗 Подойди ближе!', 'Shelley слишком далеко — подойди к ней.');
+    return;
+  }
+  state.hugging = 90;
+  state.love += 2;
+  flashDialog('🤗 Обнимашки', 'Anton нежно обнимает Shelley. Она кладёт голову ему на плечо.');
+  const p = getScreenPos(shelley);
+  spawnHeart(p.x - 10, p.y - 30, '💖');
+  spawnHeart(p.x + 15, p.y - 20, '💕');
+  updateHud();
+}
+
+function doKiss() {
+  if (state.carrying) return;
+  if (Math.hypot(anton.x - shelley.x, anton.y - shelley.y) > 70) {
+    flashDialog('💋 Подойди ближе!', 'Чтобы поцеловать, нужно быть рядом с Shelley.');
+    return;
+  }
+  state.kissing = 80;
+  state.hugging = Math.max(state.hugging, 80);
+  state.love += 3;
+  flashDialog('💋 Поцелуй', 'Anton целует Shelley. Время будто останавливается под бразильским солнцем.');
+  const p = getScreenPos(shelley);
+  spawnHeart(p.x, p.y - 40, '💋');
+  spawnHeart(p.x - 20, p.y - 25, '💕');
+  spawnHeart(p.x + 20, p.y - 30, '💖');
+  updateHud();
+}
+
+function doCarry() {
+  if (state.carrying) {
+    state.carrying = false;
+    flashDialog('🙆 Поставил на землю', 'Shelley встаёт на ноги и поправляет футболку. «Спасибо, mi amor!»');
+    return;
+  }
+  if (Math.hypot(anton.x - shelley.x, anton.y - shelley.y) > 80) {
+    flashDialog('🙆 Подойди ближе!', 'Shelley слишком далеко — подойди к ней.');
+    return;
+  }
+  state.carrying = true;
+  state.love += 2;
+  flashDialog('🙆 На руках', 'Anton поднимает Shelley на руки. Она смеётся и обвивает его шею.');
+  const p = getScreenPos(shelley);
+  spawnHeart(p.x, p.y - 30, '💕');
+  updateHud();
+}
+
+function updateHud() {
+  document.getElementById('love').textContent = state.love;
+  document.getElementById('visited').textContent = state.visited.size;
+}
+
+// ==================== COLLISION ====================
+function isBlockedTile(x, y) {
+  const tx = Math.floor(x / TILE);
+  const ty = Math.floor(y / TILE);
+  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+  const t = map[ty][tx];
+  // palm and stone block
+  return t === 1 || t === 6;
+}
+function isBlockedLandmark(x, y) {
+  for (const l of landmarks) {
+    const pad = l.solidPad || 0;
+    if (pad < 0) continue;
+    if (x > l.x + pad && x < l.x + l.w - pad &&
+        y > l.y + pad && y < l.y + l.h - pad) return true;
+  }
+  return false;
+}
+function isBlocked(x, y) {
+  return isBlockedTile(x, y) || isBlockedLandmark(x, y);
+}
+
+function tryMove(ent, dx, dy) {
+  const half = ent.w / 2 - 4;
+  const nx = ent.x + dx, ny = ent.y + dy;
+  if (!isBlocked(nx - half, ent.y - half) &&
+      !isBlocked(nx + half, ent.y - half) &&
+      !isBlocked(nx - half, ent.y + half) &&
+      !isBlocked(nx + half, ent.y + half)) ent.x = nx;
+  if (!isBlocked(ent.x - half, ny - half) &&
+      !isBlocked(ent.x + half, ny - half) &&
+      !isBlocked(ent.x - half, ny + half) &&
+      !isBlocked(ent.x + half, ny + half)) ent.y = ny;
+  ent.x = Math.max(20, Math.min(WORLD_W - 20, ent.x));
+  ent.y = Math.max(20, Math.min(WORLD_H - 20, ent.y));
+}
+
+// ==================== UPDATE ====================
+let lastT = performance.now();
+function update(dt) {
+  // Anton input
+  let dx = 0, dy = 0;
+  if (keys['w'] || keys['arrowup'] || keys['ц']) dy -= 1;
+  if (keys['s'] || keys['arrowdown'] || keys['ы']) dy += 1;
+  if (keys['a'] || keys['arrowleft'] || keys['ф']) dx -= 1;
+  if (keys['d'] || keys['arrowright'] || keys['в']) dx += 1;
+  if (joyActive && (Math.abs(joyDX) > 0.15 || Math.abs(joyDY) > 0.15)) {
+    dx = joyDX; dy = joyDY;
+  }
+  const mag = Math.hypot(dx, dy);
+  anton.moving = mag > 0;
+  if (mag > 0) {
+    dx /= mag; dy /= mag;
+    if (Math.abs(dx) > Math.abs(dy)) anton.dir = dx > 0 ? 'right' : 'left';
+    else anton.dir = dy > 0 ? 'down' : 'up';
+    anton.bobFrame += dt * 8;
+  }
+  // Lock movement during kiss/hug
+  const moveLock = state.kissing > 0 || (state.hugging > 0 && !anton.moving);
+  if (!moveLock) tryMove(anton, dx * anton.speed, dy * anton.speed);
+
+  // Shelley follow logic
+  if (state.carrying) {
+    // Sit on Anton's arms
+    shelley.x = anton.x;
+    shelley.y = anton.y - 8;
+    shelley.dir = anton.dir;
+    shelley.moving = anton.moving;
+    if (anton.moving) shelley.bobFrame += dt * 8;
+  } else {
+    let sdx = 0, sdy = 0;
+    let targetDist = state.holdingHand ? 28 : 50;
+    // Side offset when holding hands
+    let tx = anton.x, ty = anton.y;
+    if (state.holdingHand) {
+      // Stand to Anton's right (relative to facing)
+      if (anton.dir === 'right') tx = anton.x - 28, ty = anton.y;
+      else if (anton.dir === 'left') tx = anton.x + 28, ty = anton.y;
+      else if (anton.dir === 'up') tx = anton.x + 28, ty = anton.y;
+      else tx = anton.x + 28, ty = anton.y;
+    }
+    const ddx = tx - shelley.x, ddy = ty - shelley.y;
+    const dist = Math.hypot(ddx, ddy);
+    if (state.kissing > 0 || state.hugging > 0) {
+      // Move close
+      if (dist > 24) {
+        sdx = ddx / dist; sdy = ddy / dist;
+        shelley.moving = true;
+        shelley.bobFrame += dt * 8;
+        if (Math.abs(sdx) > Math.abs(sdy)) shelley.dir = sdx > 0 ? 'right' : 'left';
+        else shelley.dir = sdy > 0 ? 'down' : 'up';
+        // Face Anton during kiss/hug
+        shelley.dir = anton.dir === 'right' ? 'left' : anton.dir === 'left' ? 'right' :
+                      anton.dir === 'up' ? 'down' : 'up';
+        tryMove(shelley, sdx * shelley.speed * 1.2, sdy * shelley.speed * 1.2);
+      } else {
+        shelley.moving = false;
+        shelley.dir = anton.dir === 'right' ? 'left' : anton.dir === 'left' ? 'right' :
+                      anton.dir === 'up' ? 'down' : 'up';
+      }
+    } else if (dist > targetDist) {
+      sdx = ddx / dist; sdy = ddy / dist;
+      const sp = state.holdingHand ? anton.speed : Math.min(anton.speed * 1.05, 3);
+      tryMove(shelley, sdx * sp, sdy * sp);
+      shelley.moving = true;
+      shelley.bobFrame += dt * 8;
+      if (Math.abs(sdx) > Math.abs(sdy)) shelley.dir = sdx > 0 ? 'right' : 'left';
+      else shelley.dir = sdy > 0 ? 'down' : 'up';
+    } else {
+      shelley.moving = false;
+      // Face same direction as Anton
+      shelley.dir = anton.dir;
+    }
+  }
+
+  // Tick action timers
+  if (state.hugging > 0) state.hugging--;
+  if (state.kissing > 0) state.kissing--;
+
+  // Detect nearby landmark
+  let nearest = null, ndist = 90;
+  for (const l of landmarks) {
+    const cx = l.x + l.w / 2, cy = l.y + l.h / 2;
+    const d = Math.hypot(cx - anton.x, cy - anton.y);
+    if (d < ndist) { nearest = l; ndist = d; }
+  }
+  nearLandmark = nearest;
+  if (nearest && nearest.id !== lastNearLandmarkId) {
+    lastNearLandmarkId = nearest.id;
+    flashDialog(nearest.dialogTitle, nearest.dialogText, 4000);
+    if (!state.visited.has(nearest.id)) {
+      state.visited.add(nearest.id);
+      state.love += 1;
+      updateHud();
+      if (state.visited.size === landmarks.length) {
+        setTimeout(() => {
+          flashDialog('🇧🇷 Tudo bem!',
+            `Anton и Shelley обошли всю Бразилию. 💕 Любовь: <b>${state.love}</b>.<br>
+             Гуляйте дальше — Бразилия большая, а нежности много не бывает!`,
+            6000);
+        }, 800);
+      }
+    }
+  } else if (!nearest) {
+    lastNearLandmarkId = null;
+  }
+
+  // Location label
+  let locName = 'Бразилия';
+  if (nearLandmark) locName = nearLandmark.name;
+  else {
+    const tx = Math.floor(anton.x / TILE), ty = Math.floor(anton.y / TILE);
+    if (map[ty]) {
+      const t = map[ty][tx];
+      if (t === 2) locName = 'Океан';
+      else if (t === 3) locName = 'Пляж Копакабана';
+      else if (t === 4 || t === 7) locName = 'Улицы Рио';
+      else if (t === 5 || t === 1) locName = 'Тропический лес';
+      else if (t === 8) locName = 'Цветочное поле';
+      else locName = 'Бразилия';
+    }
+  }
+  document.getElementById('location').textContent = locName;
+
+  // Birds
+  birds.forEach(b => {
+    b.t += dt;
+    b.x += b.spd;
+    if (b.x > WORLD_W + 30) { b.x = -20; b.y = Math.random() * (WORLD_H - 400) + 50; }
+  });
+
+  // Camera
+  camera.x = anton.x - canvas.width / 2;
+  camera.y = anton.y - canvas.height / 2;
+  camera.x = Math.max(0, Math.min(WORLD_W - canvas.width, camera.x));
+  camera.y = Math.max(0, Math.min(WORLD_H - canvas.height, camera.y));
+}
+
+// ==================== DRAWING ====================
+function drawTile(t, x, y) {
+  switch (t) {
+    case 0: // grass (tropical)
+      ctx.fillStyle = '#3d7a35';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#4f9645';
+      ctx.fillRect(x + 6, y + 12, 3, 5);
+      ctx.fillRect(x + 24, y + 26, 3, 5);
+      ctx.fillStyle = '#2d5a25';
+      ctx.fillRect(x + 32, y + 8, 2, 4);
+      break;
+    case 1: { // palm tree
+      ctx.fillStyle = '#3d7a35';
+      ctx.fillRect(x, y, TILE, TILE);
+      // trunk
+      ctx.fillStyle = '#6b4a26';
+      ctx.fillRect(x + TILE/2 - 3, y + 10, 6, TILE - 12);
+      // trunk rings
+      ctx.fillStyle = '#4a3018';
+      for (let i = 0; i < 3; i++) ctx.fillRect(x + TILE/2 - 3, y + 16 + i * 8, 6, 1);
+      // fronds
+      ctx.fillStyle = '#2a7a30';
+      ctx.beginPath();
+      ctx.ellipse(x + TILE/2, y + 8, 16, 4, 0.3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(x + TILE/2, y + 8, 16, 4, -0.3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(x + TILE/2, y + 6, 4, 14, 0, 0, Math.PI*2); ctx.fill();
+      // coconut
+      ctx.fillStyle = '#4a2a18';
+      ctx.beginPath(); ctx.arc(x + TILE/2 + 4, y + 11, 2, 0, Math.PI*2); ctx.fill();
+      break;
+    }
+    case 2: { // ocean
+      ctx.fillStyle = '#2070b8';
+      ctx.fillRect(x, y, TILE, TILE);
+      const t1 = performance.now() / 700;
+      ctx.fillStyle = '#3a90d8';
+      ctx.fillRect(x + 4, y + 12 + Math.sin(t1 + x * 0.1) * 2, TILE - 8, 3);
+      ctx.fillRect(x + 8, y + 26 - Math.sin(t1 + x * 0.1) * 2, TILE - 16, 2);
+      ctx.fillStyle = 'rgba(255,255,255,.4)';
+      ctx.fillRect(x + 10, y + 20 + Math.sin(t1 * 1.3 + x) * 1.5, 8, 1);
+      break;
+    }
+    case 3: // sand
+      ctx.fillStyle = '#e8d090';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#d4b870';
+      ctx.fillRect(x + 8, y + 14, 3, 2);
+      ctx.fillRect(x + 22, y + 28, 3, 2);
+      ctx.fillStyle = '#f0deaa';
+      ctx.fillRect(x + 28, y + 10, 2, 2);
+      break;
+    case 4: // path (cobblestone)
+      ctx.fillStyle = '#a89878';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#7a6850';
+      ctx.fillRect(x + 4, y + 6, 10, 8);
+      ctx.fillRect(x + 22, y + 6, 12, 10);
+      ctx.fillRect(x + 6, y + 22, 12, 10);
+      ctx.fillRect(x + 24, y + 24, 10, 8);
+      break;
+    case 5: // jungle bush
+      ctx.fillStyle = '#3d7a35';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#1c4a18';
+      ctx.beginPath();
+      ctx.arc(x + TILE/2, y + TILE/2, 14, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#2a6a25';
+      ctx.beginPath();
+      ctx.arc(x + TILE/2 - 4, y + TILE/2 - 4, 8, 0, Math.PI*2); ctx.fill();
+      // tropical flower hints
+      ctx.fillStyle = '#ff5577';
+      ctx.beginPath(); ctx.arc(x + TILE/2 + 6, y + TILE/2 + 4, 2, 0, Math.PI*2); ctx.fill();
+      break;
+    case 6: // stone (mountain)
+      ctx.fillStyle = '#7a7068';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#5a504a';
+      ctx.beginPath();
+      ctx.ellipse(x + TILE/2, y + TILE/2, 16, 14, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#9a8e84';
+      ctx.beginPath();
+      ctx.ellipse(x + TILE/2 - 5, y + TILE/2 - 5, 6, 4, 0, 0, Math.PI*2); ctx.fill();
+      break;
+    case 7: // sidewalk
+      ctx.fillStyle = '#bfb8a8';
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.strokeStyle = '#888070';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
+      ctx.beginPath();
+      ctx.moveTo(x + TILE/2, y); ctx.lineTo(x + TILE/2, y + TILE); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, y + TILE/2); ctx.lineTo(x + TILE, y + TILE/2); ctx.stroke();
+      break;
+    case 8: // tropical flowers
+      ctx.fillStyle = '#3d7a35';
+      ctx.fillRect(x, y, TILE, TILE);
+      const colors = ['#ff5577', '#ffaa44', '#ffdf00', '#ff77aa'];
+      for (let i = 0; i < 4; i++) {
+        const fx = x + 8 + (i % 2) * 18 + Math.random() * 2;
+        const fy = y + 8 + Math.floor(i / 2) * 18 + Math.random() * 2;
+        ctx.fillStyle = colors[i];
+        ctx.beginPath(); ctx.arc(fx, fy, 3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ffdf00';
+        ctx.beginPath(); ctx.arc(fx, fy, 1.2, 0, Math.PI*2); ctx.fill();
+      }
+      break;
+  }
+}
+
+// Brazilian flag panel — used for shirts AND for the giant flag landmark
+function drawBrazilFlag(cx, cy, w, h) {
+  // green background
+  ctx.fillStyle = '#009c3b';
+  ctx.fillRect(cx - w/2, cy - h/2, w, h);
+  // yellow rhombus
+  ctx.fillStyle = '#ffdf00';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - h/2 + 2);
+  ctx.lineTo(cx + w/2 - 2, cy);
+  ctx.lineTo(cx, cy + h/2 - 2);
+  ctx.lineTo(cx - w/2 + 2, cy);
+  ctx.closePath();
+  ctx.fill();
+  // blue circle
+  const r = Math.min(w, h) * 0.22;
+  ctx.fillStyle = '#002776';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+  // white stars
+  ctx.fillStyle = '#fff';
+  const starsRel = [[-0.4,-0.1],[0.3,0.0],[-0.1,0.3],[0.1,-0.2],[0.4,0.2],[-0.3,0.2],[0.0,0.0]];
+  starsRel.forEach(([sx,sy]) => {
+    ctx.beginPath();
+    ctx.arc(cx + sx * r, cy + sy * r, Math.max(0.8, r * 0.08), 0, Math.PI*2);
+    ctx.fill();
+  });
+  // "Ordem e Progresso" band (just a hint)
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(cx - r * 0.85, cy - 1, r * 1.7, 2);
+  ctx.strokeStyle = '#002776';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.85, cy);
+  ctx.lineTo(cx + r * 0.85, cy);
+  ctx.stroke();
+}
+
+function drawLandmark(l) {
+  const x = l.x - camera.x;
+  const y = l.y - camera.y;
+  const w = l.w, h = l.h;
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.beginPath();
+  ctx.ellipse(x + w/2, y + h - 4, w/2 - 4, 8, 0, 0, Math.PI*2); ctx.fill();
+
+  if (l.type === 'christ') {
+    // Mountain pedestal
+    ctx.fillStyle = '#7a7068';
+    ctx.beginPath();
+    ctx.moveTo(x, y + h);
+    ctx.lineTo(x + w/2, y + h * 0.55);
+    ctx.lineTo(x + w, y + h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#5a504a';
+    ctx.beginPath();
+    ctx.moveTo(x + 10, y + h);
+    ctx.lineTo(x + w/2, y + h * 0.6);
+    ctx.lineTo(x + w/2 + 4, y + h);
+    ctx.closePath();
+    ctx.fill();
+    // Christ statue
+    const sx = x + w/2, sy = y + h * 0.45;
+    // body
+    ctx.fillStyle = '#dcdcdc';
+    ctx.fillRect(sx - 6, sy - 30, 12, 30);
+    // arms outstretched (cross)
+    ctx.fillRect(sx - 30, sy - 22, 60, 6);
+    // hands
+    ctx.fillRect(sx - 32, sy - 26, 4, 10);
+    ctx.fillRect(sx + 28, sy - 26, 4, 10);
+    // head
+    ctx.fillStyle = '#c8c8c8';
+    ctx.beginPath(); ctx.arc(sx, sy - 36, 5, 0, Math.PI*2); ctx.fill();
+    // robe lines
+    ctx.fillStyle = '#a8a8a8';
+    ctx.fillRect(sx - 4, sy - 25, 1, 24);
+    ctx.fillRect(sx + 3, sy - 25, 1, 24);
+  }
+  else if (l.type === 'sugarloaf') {
+    // Sugarloaf mountain — round-top stone
+    ctx.fillStyle = '#7a7068';
+    ctx.beginPath();
+    ctx.moveTo(x + 6, y + h);
+    ctx.quadraticCurveTo(x + w/2, y - 6, x + w - 6, y + h);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#5a504a';
+    ctx.beginPath();
+    ctx.ellipse(x + w*0.35, y + h*0.5, 10, 20, 0.3, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#9a8e84';
+    ctx.beginPath();
+    ctx.ellipse(x + w*0.6, y + h*0.3, 6, 14, -0.4, 0, Math.PI*2); ctx.fill();
+    // cable car wire
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + w/2, y + 8);
+    ctx.lineTo(x + w + 80, y + h - 20);
+    ctx.stroke();
+    // cable car
+    const t = performance.now() / 4000;
+    const cT = (Math.sin(t) + 1) / 2;
+    const ccx = x + w/2 + cT * 80, ccy = y + 8 + cT * (h - 28);
+    ctx.fillStyle = '#c92a2a';
+    ctx.fillRect(ccx - 6, ccy, 12, 8);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(ccx - 5, ccy + 2, 10, 3);
+  }
+  else if (l.type === 'maracana') {
+    // Stadium - oval bowl
+    ctx.fillStyle = '#dadada';
+    ctx.beginPath();
+    ctx.ellipse(x + w/2, y + h*0.75, w/2 - 4, h/3, 0, 0, Math.PI*2); ctx.fill();
+    // green field
+    ctx.fillStyle = '#3a8a3a';
+    ctx.beginPath();
+    ctx.ellipse(x + w/2, y + h*0.75, w/2 - 16, h/4, 0, 0, Math.PI*2); ctx.fill();
+    // center line
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + w/2, y + h*0.5);
+    ctx.lineTo(x + w/2, y + h);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x + w/2, y + h*0.75, 8, 0, Math.PI*2);
+    ctx.stroke();
+    // floodlights
+    for (let i = 0; i < 4; i++) {
+      const lx = x + 14 + i * (w - 28) / 3;
+      ctx.fillStyle = '#888';
+      ctx.fillRect(lx - 1, y + 10, 2, 14);
+      ctx.fillStyle = '#ffe070';
+      ctx.fillRect(lx - 4, y + 6, 8, 5);
+    }
+    // brazil flag on top
+    drawBrazilFlag(x + w/2, y + 4, 22, 14);
+  }
+  else if (l.type === 'cafe') {
+    // Building
+    ctx.fillStyle = '#e8a838';
+    ctx.fillRect(x + 6, y + 16, w - 12, h - 18);
+    // roof
+    ctx.fillStyle = '#a83828';
+    ctx.beginPath();
+    ctx.moveTo(x, y + 18);
+    ctx.lineTo(x + w/2, y + 4);
+    ctx.lineTo(x + w, y + 18);
+    ctx.closePath(); ctx.fill();
+    // door
+    ctx.fillStyle = '#5a3e22';
+    ctx.fillRect(x + w/2 - 8, y + h - 22, 16, 22);
+    // window
+    ctx.fillStyle = '#80c0e0';
+    ctx.fillRect(x + 12, y + 22, 16, 12);
+    ctx.strokeStyle = '#5a3e22'; ctx.lineWidth = 1;
+    ctx.strokeRect(x + 12, y + 22, 16, 12);
+    // sign
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x + w/2 - 18, y + 16, 36, 8);
+    ctx.fillStyle = '#a83828';
+    ctx.font = 'bold 7px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('CAFÉ', x + w/2, y + 22);
+    // table outside
+    ctx.fillStyle = '#6b4a26';
+    ctx.fillRect(x + w - 18, y + h - 14, 14, 10);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(x + w - 11, y + h - 11, 2.5, 0, Math.PI*2); ctx.fill();
+  }
+  else if (l.type === 'beach') {
+    // Beach umbrella + chairs
+    const ux = x + w/2, uy = y + h/2;
+    // post
+    ctx.fillStyle = '#6b4a26';
+    ctx.fillRect(ux - 1, uy - 4, 2, 28);
+    // umbrella
+    ctx.fillStyle = '#c92a2a';
+    ctx.beginPath();
+    ctx.moveTo(ux - 26, uy - 4);
+    ctx.quadraticCurveTo(ux, uy - 30, ux + 26, uy - 4);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(ux - 13, uy - 14);
+    ctx.quadraticCurveTo(ux, uy - 26, ux + 13, uy - 14);
+    ctx.lineTo(ux + 8, uy - 8);
+    ctx.quadraticCurveTo(ux, uy - 18, ux - 8, uy - 8);
+    ctx.closePath(); ctx.fill();
+    // chair
+    ctx.fillStyle = '#dcc89a';
+    ctx.fillRect(ux - 30, uy + 18, 18, 5);
+    ctx.fillRect(ux + 12, uy + 18, 18, 5);
+  }
+  else if (l.type === 'flag') {
+    // Tall flagpole with huge Brazilian flag
+    const px = x + w/2;
+    // pole
+    ctx.fillStyle = '#cccccc';
+    ctx.fillRect(px - 2, y + 4, 4, h - 6);
+    // top knob
+    ctx.fillStyle = '#ffdf00';
+    ctx.beginPath(); ctx.arc(px, y + 4, 4, 0, Math.PI*2); ctx.fill();
+    // wave
+    const t = performance.now() / 600;
+    const flagW = w * 1.4;
+    const flagH = h * 0.45;
+    const fx = px + 2;
+    const fy = y + 8;
+    // draw wavy flag using clip
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(fx, fy);
+    for (let i = 0; i <= 12; i++) {
+      const px2 = fx + (flagW * i / 12);
+      const py2 = fy + Math.sin(t + i * 0.6) * 3;
+      ctx.lineTo(px2, py2);
+    }
+    ctx.lineTo(fx + flagW, fy + flagH);
+    for (let i = 12; i >= 0; i--) {
+      const px2 = fx + (flagW * i / 12);
+      const py2 = fy + flagH + Math.sin(t + i * 0.6) * 3;
+      ctx.lineTo(px2, py2);
+    }
+    ctx.closePath();
+    ctx.clip();
+    drawBrazilFlag(fx + flagW/2, fy + flagH/2, flagW, flagH);
+    ctx.restore();
+    // flag border
+    ctx.strokeStyle = 'rgba(0,0,0,.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(fx, fy);
+    for (let i = 0; i <= 12; i++) {
+      const px2 = fx + (flagW * i / 12);
+      const py2 = fy + Math.sin(t + i * 0.6) * 3;
+      ctx.lineTo(px2, py2);
+    }
+    ctx.stroke();
+  }
+}
+
+// Draw a character (Anton or Shelley) at position with options
+function drawCharacter(ent, opts) {
+  const sx = ent.x - camera.x;
+  const sy = ent.y - camera.y;
+  const bob = ent.moving ? Math.sin(ent.bobFrame) * 1.6 : 0;
+  const isMale = opts.male;
+  const dir = ent.dir;
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + 18, 14, 5, 0, 0, Math.PI*2); ctx.fill();
+
+  // legs (shorts)
+  ctx.fillStyle = isMale ? '#1a3a6e' : '#2a4a8e';
+  // left leg
+  ctx.fillRect(sx - 7, sy + 6 + bob * 0.5, 6, 12);
+  ctx.fillRect(sx + 1, sy + 6 - bob * 0.5, 6, 12);
+
+  // skin tone
+  const skin = isMale ? '#f0c098' : '#f8d4b0';
+  const skinDark = isMale ? '#d09a78' : '#dcb088';
+
+  // arms (skin)
+  ctx.fillStyle = skin;
+  // For hand-holding: arm reaches sideways
+  if (opts.handArm) {
+    if (opts.handArm === 'right') {
+      ctx.fillRect(sx + 6, sy - 4 + bob, 10, 4);
+    } else {
+      ctx.fillRect(sx - 16, sy - 4 + bob, 10, 4);
+    }
+  }
+  // Hug arms (around partner)
+  if (opts.hugging) {
+    ctx.fillRect(sx - 14, sy - 6 + bob, 6, 4);
+    ctx.fillRect(sx + 8, sy - 6 + bob, 6, 4);
+  }
+
+  // body — t-shirt with Brazilian flag
+  const bodyW = 22, bodyH = 16;
+  const bx = sx - bodyW/2, by = sy - 8 + bob;
+  // base shirt
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(bx, by, bodyW, bodyH);
+  // sleeves
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(bx - 4, by, 4, 7);
+  ctx.fillRect(bx + bodyW, by, 4, 7);
+  // skin under sleeves
+  ctx.fillStyle = skin;
+  ctx.fillRect(bx - 6, by + 7, 5, 4);
+  ctx.fillRect(bx + bodyW + 1, by + 7, 5, 4);
+  // Brazilian flag on shirt
+  drawBrazilFlag(sx, by + bodyH/2, bodyW - 4, bodyH - 4);
+  // shirt collar
+  ctx.fillStyle = '#f0f0f0';
+  ctx.fillRect(bx + bodyW/2 - 3, by, 6, 2);
+
+  // neck
+  ctx.fillStyle = skinDark;
+  ctx.fillRect(sx - 3, by - 3, 6, 4);
+
+  // head
+  ctx.fillStyle = skin;
+  ctx.beginPath();
+  ctx.arc(sx, sy - 14 + bob, 9, 0, Math.PI*2); ctx.fill();
+  // ear
+  ctx.fillStyle = skinDark;
+  if (dir !== 'left') ctx.fillRect(sx + 8, sy - 14 + bob, 2, 3);
+  if (dir !== 'right') ctx.fillRect(sx - 10, sy - 14 + bob, 2, 3);
+
+  // hair
+  if (isMale) {
+    // Anton: short brown hair
+    ctx.fillStyle = '#5a3a1a';
+    ctx.beginPath();
+    ctx.arc(sx, sy - 17 + bob, 8.5, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.fillRect(sx - 8, sy - 17 + bob, 16, 4);
+  } else {
+    // Shelley: long blonde wavy hair
+    ctx.fillStyle = '#e8c060';
+    ctx.beginPath();
+    ctx.arc(sx, sy - 17 + bob, 9.5, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.fillRect(sx - 9, sy - 17 + bob, 18, 5);
+    // hair flowing down sides
+    ctx.beginPath();
+    ctx.moveTo(sx - 9, sy - 14 + bob);
+    ctx.quadraticCurveTo(sx - 13, sy - 5 + bob, sy - 11 + bob ? sx - 11 : sx - 11, sy + 2 + bob);
+    ctx.lineTo(sx - 7, sy + 2 + bob);
+    ctx.quadraticCurveTo(sx - 8, sy - 6 + bob, sx - 6, sy - 14 + bob);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(sx + 9, sy - 14 + bob);
+    ctx.quadraticCurveTo(sx + 13, sy - 5 + bob, sx + 11, sy + 2 + bob);
+    ctx.lineTo(sx + 7, sy + 2 + bob);
+    ctx.quadraticCurveTo(sx + 8, sy - 6 + bob, sx + 6, sy - 14 + bob);
+    ctx.closePath(); ctx.fill();
+    // pink flower in hair
+    ctx.fillStyle = '#ff5577';
+    ctx.beginPath(); ctx.arc(sx + 7, sy - 18 + bob, 2.2, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ffdf00';
+    ctx.beginPath(); ctx.arc(sx + 7, sy - 18 + bob, 0.8, 0, Math.PI*2); ctx.fill();
+  }
+
+  // face — only show features for non-back view
+  if (dir !== 'up') {
+    // eyes
+    const eyeOffX = dir === 'left' ? -1 : dir === 'right' ? 1 : 0;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(sx - 3, sy - 14 + bob, 1.6, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + 3, sy - 14 + bob, 1.6, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = isMale ? '#3a5a8a' : '#3a8a5a';
+    ctx.beginPath(); ctx.arc(sx - 3 + eyeOffX * 0.6, sy - 14 + bob, 0.9, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + 3 + eyeOffX * 0.6, sy - 14 + bob, 0.9, 0, Math.PI*2); ctx.fill();
+
+    // mouth
+    if (opts.kissing) {
+      // pucker
+      ctx.fillStyle = '#c84060';
+      ctx.beginPath(); ctx.arc(sx + (dir === 'left' ? -3 : dir === 'right' ? 3 : 0), sy - 9 + bob, 1.8, 0, Math.PI*2); ctx.fill();
+    } else if (opts.hugging) {
+      // smile
+      ctx.strokeStyle = '#3a2010';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(sx, sy - 11 + bob, 2.2, 0.1, Math.PI - 0.1);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = '#3a2010';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(sx, sy - 11 + bob, 1.6, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+    }
+
+    // blush for Shelley when affectionate
+    if (!isMale && (opts.kissing || opts.hugging)) {
+      ctx.fillStyle = 'rgba(255,120,140,.5)';
+      ctx.beginPath(); ctx.arc(sx - 5, sy - 11 + bob, 1.8, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 5, sy - 11 + bob, 1.8, 0, Math.PI*2); ctx.fill();
+    }
+  } else {
+    // back of head — no features
+  }
+
+  // sandals
+  ctx.fillStyle = '#3a2010';
+  ctx.fillRect(sx - 8, sy + 18, 6, 2);
+  ctx.fillRect(sx + 2, sy + 18, 6, 2);
+}
+
+function drawBird(b) {
+  const x = b.x - camera.x;
+  const y = b.y - camera.y;
+  if (x < -30 || y < -30 || x > canvas.width + 30 || y > canvas.height + 30) return;
+  const flap = Math.sin(b.t * 12) * 4;
+  ctx.fillStyle = `hsl(${b.hue}, 80%, 55%)`;
+  ctx.beginPath();
+  ctx.ellipse(x - 4, y - flap * 0.3, 5, 2, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + 4, y - flap * 0.3, 5, 2, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.fillRect(x - 1, y - 1, 2, 4);
+}
+
+function drawHandLink() {
+  if (!state.holdingHand || state.carrying) return;
+  if (state.kissing > 0 || state.hugging > 0) return;
+  // Draw a line/skin between Anton's near hand and Shelley's near hand
+  const ax = anton.x - camera.x, ay = anton.y - camera.y - 4;
+  const sx = shelley.x - camera.x, sy = shelley.y - camera.y - 4;
+  ctx.strokeStyle = '#f0c098';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(sx, sy);
+  ctx.stroke();
+  // little heart at midpoint
+  const mx = (ax + sx) / 2, my = (ay + sy) / 2 - 6;
+  ctx.fillStyle = '#ff5577';
+  ctx.font = '14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('💕', mx, my);
+}
+
+function drawCarryArms() {
+  if (!state.carrying) return;
+  const sx = anton.x - camera.x;
+  const sy = anton.y - camera.y;
+  // Anton's arms extend forward to support Shelley
+  ctx.fillStyle = '#f0c098';
+  ctx.fillRect(sx - 14, sy - 4, 28, 5);
+}
+
+function draw() {
+  ctx.fillStyle = '#4a8c4a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Sky gradient at top of world
+  if (camera.y < 100) {
+    const g = ctx.createLinearGradient(0, 0, 0, 200);
+    g.addColorStop(0, 'rgba(135,200,255,.6)');
+    g.addColorStop(1, 'rgba(135,200,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, canvas.width, 200);
+  }
+
+  // Tiles
+  const x0 = Math.max(0, Math.floor(camera.x / TILE));
+  const y0 = Math.max(0, Math.floor(camera.y / TILE));
+  const x1 = Math.min(MAP_W, Math.ceil((camera.x + canvas.width) / TILE));
+  const y1 = Math.min(MAP_H, Math.ceil((camera.y + canvas.height) / TILE));
+  for (let y = y0; y < y1; y++)
+    for (let x = x0; x < x1; x++)
+      drawTile(map[y][x], x*TILE - camera.x, y*TILE - camera.y);
+
+  // Sort landmarks/birds/characters by Y for depth
+  const drawables = [];
+  for (const l of landmarks) drawables.push({ kind: 'lm', y: l.y + l.h, item: l });
+  for (const b of birds) drawables.push({ kind: 'bird', y: b.y, item: b });
+
+  // Anton & Shelley
+  const isHugging = state.hugging > 0;
+  const isKissing = state.kissing > 0;
+  // determine hand-holding side based on Anton facing
+  let antonArm = null, shelleyArm = null;
+  if (state.holdingHand && !state.carrying && !isHugging) {
+    antonArm = 'right';
+    shelleyArm = 'left';
+  }
+
+  if (state.carrying) {
+    // Draw Anton, then Shelley on top (carried)
+    drawables.push({ kind: 'anton', y: anton.y, opts: { male: true, handArm: null, hugging: false, kissing: false } });
+    drawables.push({ kind: 'shelley', y: anton.y + 0.1, opts: { male: false, handArm: null, hugging: true, kissing: isKissing } });
+    drawables.push({ kind: 'carry-arms', y: anton.y + 0.05 });
+  } else {
+    drawables.push({ kind: 'anton', y: anton.y, opts: { male: true, handArm: antonArm, hugging: isHugging, kissing: isKissing } });
+    drawables.push({ kind: 'shelley', y: shelley.y, opts: { male: false, handArm: shelleyArm, hugging: isHugging, kissing: isKissing } });
+    drawables.push({ kind: 'hand', y: Math.min(anton.y, shelley.y) - 1 });
+  }
+
+  drawables.sort((a, b) => a.y - b.y);
+  for (const d of drawables) {
+    if (d.kind === 'lm') drawLandmark(d.item);
+    else if (d.kind === 'bird') drawBird(d.item);
+    else if (d.kind === 'anton') drawCharacter(anton, d.opts);
+    else if (d.kind === 'shelley') drawCharacter(shelley, d.opts);
+    else if (d.kind === 'hand') drawHandLink();
+    else if (d.kind === 'carry-arms') drawCarryArms();
+  }
+
+  // Hug aura (hearts swirl)
+  if (state.hugging > 0 || state.kissing > 0) {
+    const cx = (anton.x + shelley.x) / 2 - camera.x;
+    const cy = (anton.y + shelley.y) / 2 - camera.y - 24;
+    const t = performance.now() / 200;
+    for (let i = 0; i < 4; i++) {
+      const a = t + i * Math.PI / 2;
+      const hx = cx + Math.cos(a) * 18;
+      const hy = cy + Math.sin(a) * 8;
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(state.kissing > 0 ? '💋' : '💕', hx, hy);
+    }
+  }
+
+  // soft vignette
+  const grd = ctx.createRadialGradient(canvas.width/2, canvas.height/2,
+    Math.min(canvas.width, canvas.height) * 0.4,
+    canvas.width/2, canvas.height/2,
+    Math.max(canvas.width, canvas.height) * 0.75);
+  grd.addColorStop(0, 'rgba(0,0,0,0)');
+  grd.addColorStop(1, 'rgba(0,0,0,.35)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+// ==================== LOOP ====================
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  if (!gameStarted) { requestAnimationFrame(loop); return; }
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ==================== START ====================
+let gameStarted = false;
+document.getElementById('msg-btn').onclick = () => {
+  document.getElementById('message').classList.add('hidden');
+  document.getElementById('message').style.display = 'none';
+  gameStarted = true;
+  resizeCanvas();
+};
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

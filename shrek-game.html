@@ -421,6 +421,8 @@ function isMud(x, y) {
 
 // ===== UPDATE =====
 function update(dt) {
+  // safety: don't run until the map and bugs are initialized
+  if (!map.length || !map[0]) return;
   let dx = 0, dy = 0;
   if (keys['w'] || keys['arrowup'] || keys['ц']) dy -= 1;
   if (keys['s'] || keys['arrowdown'] || keys['ы']) dy += 1;
@@ -960,6 +962,8 @@ function drawBug(b) {
 function draw() {
   ctx.clearRect(0, 0, W, H);
 
+  if (!map.length || !map[0]) return;
+
   // tiles
   const x0 = Math.max(0, Math.floor(camera.x / TILE));
   const y0 = Math.max(0, Math.floor(camera.y / TILE));
@@ -1049,6 +1053,11 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
+// Initialize the world FIRST so the loop has data to render,
+// then show the welcome message on top.
+startTour();
+loop();
+
 showMessage(
   '🟢 Болото Шрека',
   `Добро пожаловать на болото! Это твоя <b>экскурсия</b>.<br><br>
@@ -1061,10 +1070,8 @@ showMessage(
    📱 Джойстик внизу слева<br><br>
    Просто гуляй и наслаждайся!`,
   'В путь! 💚',
-  startTour
+  () => {}
 );
-
-loop();
 
 // resize
 function fit() {

@@ -131,12 +131,25 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 
-// Try to load Shrek image. If not found, draw a fallback.
+// Try to load Shrek image. Tries multiple file names; uses fallback if none load.
 const shrekImg = new Image();
 let shrekImgLoaded = false;
+const shrekCandidates = [
+  'assets/shrek.png',
+  'assets/shrek.jpeg',
+  'assets/shrek.jpg',
+  'assets/IMG_1012.jpeg',
+  'assets/IMG_1012.jpg',
+  'assets/IMG_1012.png'
+];
+let shrekTryIndex = 0;
+function tryLoadShrek() {
+  if (shrekTryIndex >= shrekCandidates.length) return;
+  shrekImg.src = shrekCandidates[shrekTryIndex++];
+}
 shrekImg.onload = () => { shrekImgLoaded = true; };
-shrekImg.onerror = () => { shrekImgLoaded = false; };
-shrekImg.src = 'assets/shrek.png';
+shrekImg.onerror = () => { tryLoadShrek(); };
+tryLoadShrek();
 
 // ===== GAME STATE =====
 const TILE = 40;
@@ -475,7 +488,7 @@ function drawShrek(sx, sy) {
     if (player.invuln > 0 && Math.floor(player.invuln / 6) % 2 === 0) {
       ctx.globalAlpha = 0.4;
     }
-    const size = 64;
+    const size = 72;
     // mirror for left direction
     if (player.dir === 'left') {
       ctx.save();

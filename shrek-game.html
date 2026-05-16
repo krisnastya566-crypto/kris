@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Shrek's Swamp Adventure</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -20,11 +20,11 @@
     position: relative;
     width: 100vw; height: 100vh;
     display: flex; align-items: center; justify-content: center;
+    background: #1a2e1a;
   }
   canvas {
     background: #3d5a2b;
     display: block;
-    image-rendering: pixelated;
     box-shadow: 0 0 40px rgba(0,0,0,.6);
     max-width: 100%;
     max-height: 100%;
@@ -32,57 +32,61 @@
   #hud {
     position: absolute;
     top: 12px; left: 12px;
-    background: rgba(0,0,0,.55);
-    padding: 10px 14px;
+    background: rgba(0,0,0,.6);
+    padding: 8px 12px;
     border-radius: 10px;
-    font-size: 16px;
-    line-height: 1.5;
+    font-size: 14px;
+    line-height: 1.4;
     border: 2px solid #6b4423;
     pointer-events: none;
+    z-index: 4;
   }
   #hud span { color: #aef36b; font-weight: bold; }
   #message {
     position: absolute;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    background: rgba(20, 40, 20, .95);
+    background: rgba(20, 40, 20, .97);
     border: 4px solid #6b4423;
     border-radius: 18px;
-    padding: 30px 40px;
+    padding: 24px 28px;
     text-align: center;
-    font-size: 22px;
-    max-width: 90%;
-    display: none;
+    font-size: 16px;
+    line-height: 1.5;
+    width: 90%;
+    max-width: 360px;
     z-index: 10;
     box-shadow: 0 0 30px rgba(174, 243, 107, .4);
   }
   #message h1 {
     color: #aef36b;
-    font-size: 32px;
-    margin-bottom: 14px;
+    font-size: 24px;
+    margin-bottom: 12px;
     text-shadow: 2px 2px 0 #000;
   }
   #message button {
-    margin-top: 20px;
-    padding: 12px 28px;
+    margin-top: 16px;
+    padding: 14px 32px;
     font-size: 18px;
     background: #aef36b;
     color: #1a2e1a;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     cursor: pointer;
     font-weight: bold;
     font-family: inherit;
+    width: 100%;
   }
-  #message button:hover { background: #c8ff80; }
+  #message button:active { background: #c8ff80; transform: scale(0.97); }
+  #message.hidden { display: none; }
 
   /* Mobile joystick */
   #joystick {
     position: absolute;
-    bottom: 30px; left: 30px;
-    width: 130px; height: 130px;
-    background: rgba(0,0,0,.3);
-    border: 3px solid rgba(255,255,255,.4);
+    bottom: 24px; left: 24px;
+    width: 120px; height: 120px;
+    background: rgba(0,0,0,.35);
+    border: 3px solid rgba(255,255,255,.5);
     border-radius: 50%;
     display: none;
     z-index: 5;
@@ -90,34 +94,38 @@
   }
   #stick {
     position: absolute;
-    width: 60px; height: 60px;
-    background: rgba(174, 243, 107, .8);
+    width: 56px; height: 56px;
+    background: rgba(174, 243, 107, .85);
     border: 2px solid #fff;
     border-radius: 50%;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     pointer-events: none;
   }
-  @media (max-width: 768px), (pointer: coarse) {
+  @media (pointer: coarse), (max-width: 800px) {
     #joystick { display: block; }
-    #hud { font-size: 13px; padding: 8px 10px; }
+    #hud { font-size: 12px; padding: 6px 10px; }
   }
 </style>
 </head>
 <body>
 <div id="game-wrap">
-  <canvas id="game" width="960" height="640"></canvas>
+  <canvas id="game" width="800" height="600"></canvas>
 
   <div id="hud">
-    🧅 Луковицы: <span id="onions">0</span> / <span id="onions-total">10</span><br>
-    ⏱️ Время: <span id="timer">0</span>с<br>
-    ❤️ HP: <span id="hp">3</span>
+    🧅 <span id="onions">0</span> / <span id="onions-total">10</span><br>
+    ⏱️ <span id="timer">0</span>с<br>
+    ❤️ <span id="hp">3</span>
   </div>
 
   <div id="message">
-    <h1 id="msg-title">Привет!</h1>
-    <p id="msg-text">Текст</p>
-    <button id="msg-btn">Играть</button>
+    <h1>🟢 Shrek's Swamp</h1>
+    <p>Помоги Шреку найти Фиону на болоте!<br><br>
+       🧅 Собери все <b>10 луковиц</b><br>
+       👮 Беги от <b>стражников</b><br>
+       👸 Дойди до <b>Фионы</b><br><br>
+       <b>WASD</b> или <b>джойстик 📱</b></p>
+    <button id="msg-btn">Начать! 💚</button>
   </div>
 
   <div id="joystick">
@@ -126,96 +134,74 @@
 </div>
 
 <script>
-// ===== SETUP =====
+(function(){
+'use strict';
+
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
-
-// Try to load Shrek image. Tries multiple file names; uses fallback if none load.
-const shrekImg = new Image();
-let shrekImgLoaded = false;
-const shrekCandidates = [
-  'assets/shrek.png',
-  'assets/shrek.jpeg',
-  'assets/shrek.jpg',
-  'assets/IMG_1012.jpeg',
-  'assets/IMG_1012.jpg',
-  'assets/IMG_1012.png'
-];
-let shrekTryIndex = 0;
-function tryLoadShrek() {
-  if (shrekTryIndex >= shrekCandidates.length) return;
-  shrekImg.src = shrekCandidates[shrekTryIndex++];
-}
-shrekImg.onload = () => { shrekImgLoaded = true; };
-shrekImg.onerror = () => { tryLoadShrek(); };
-tryLoadShrek();
+const messageEl = document.getElementById('message');
+const msgBtn = document.getElementById('msg-btn');
 
 // ===== GAME STATE =====
 const TILE = 40;
-const MAP_W = 30, MAP_H = 20; // tiles
-const WORLD_W = MAP_W * TILE; // 1200
-const WORLD_H = MAP_H * TILE; // 800
+const MAP_W = 24, MAP_H = 18;
+const WORLD_W = MAP_W * TILE;
+const WORLD_H = MAP_H * TILE;
 
-// 0 = grass, 1 = tree, 2 = water, 3 = rock, 4 = mud
 const map = [];
 function generateMap() {
   for (let y = 0; y < MAP_H; y++) {
     map[y] = [];
     for (let x = 0; x < MAP_W; x++) {
-      // Border = trees
       if (x === 0 || y === 0 || x === MAP_W-1 || y === MAP_H-1) {
         map[y][x] = 1;
       } else {
         const r = Math.random();
-        if (r < 0.08) map[y][x] = 1;       // tree
-        else if (r < 0.11) map[y][x] = 3;  // rock
-        else if (r < 0.14) map[y][x] = 4;  // mud
-        else map[y][x] = 0;                // grass
+        if (r < 0.07) map[y][x] = 1;
+        else if (r < 0.10) map[y][x] = 3;
+        else if (r < 0.13) map[y][x] = 4;
+        else map[y][x] = 0;
       }
     }
   }
-  // Water pond in the corner
-  for (let y = 2; y < 6; y++) {
-    for (let x = 2; x < 7; x++) {
+  // Pond
+  for (let y = 2; y < 5; y++)
+    for (let x = 2; x < 6; x++)
       if (Math.random() > 0.2) map[y][x] = 2;
-    }
-  }
-  // Clear spawn
-  for (let y = 8; y < 12; y++) {
-    for (let x = 13; x < 17; x++) {
+  // Spawn area cleared
+  for (let y = 8; y < 11; y++)
+    for (let x = 11; x < 14; x++)
       map[y][x] = 0;
-    }
-  }
 }
 
 const player = {
-  x: 15 * TILE, y: 10 * TILE,
-  w: 36, h: 36,
-  speed: 3.2,
+  x: 12 * TILE, y: 9 * TILE,
+  w: 30, h: 30,
+  speed: 2.8,
   dir: 'down',
   hp: 3,
   invuln: 0,
   bobFrame: 0
 };
 
-let onions = []; // {x, y, collected}
-let guards = []; // {x, y, vx, vy, patrolT}
-let fiona = null; // {x, y}
+let onions = [];
+let guards = [];
+let fiona = null;
 let camera = { x: 0, y: 0 };
-
 let collected = 0;
 const ONIONS_TOTAL = 10;
 let startTime = 0, elapsed = 0;
 let gameRunning = false;
-let gameWon = false;
 
-// ===== ENTITY GENERATION =====
-function findFreeTile() {
+function findFreeTile(minDist) {
   for (let i = 0; i < 200; i++) {
     const tx = 1 + Math.floor(Math.random() * (MAP_W - 2));
     const ty = 1 + Math.floor(Math.random() * (MAP_H - 2));
-    if (map[ty][tx] === 0) return { x: tx * TILE + TILE/2, y: ty * TILE + TILE/2 };
+    if (map[ty][tx] !== 0) continue;
+    const px = tx * TILE + TILE/2, py = ty * TILE + TILE/2;
+    if (minDist && Math.hypot(px - player.x, py - player.y) < minDist) continue;
+    return { x: px, y: py };
   }
   return { x: WORLD_W/2, y: WORLD_H/2 };
 }
@@ -223,22 +209,23 @@ function findFreeTile() {
 function setupEntities() {
   onions = [];
   for (let i = 0; i < ONIONS_TOTAL; i++) {
-    const p = findFreeTile();
+    const p = findFreeTile(50);
     onions.push({ x: p.x, y: p.y, collected: false, bob: Math.random() * Math.PI * 2 });
   }
   guards = [];
-  for (let i = 0; i < 4; i++) {
-    const p = findFreeTile();
+  for (let i = 0; i < 3; i++) {
+    const p = findFreeTile(150);
     guards.push({
-      x: p.x, y: p.y, w: 32, h: 32,
-      vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2,
+      x: p.x, y: p.y, w: 28, h: 28,
+      vx: (Math.random() - 0.5) * 1.5,
+      vy: (Math.random() - 0.5) * 1.5,
       patrolT: Math.random() * 100
     });
   }
-  // Fiona in far corner
-  fiona = { x: (MAP_W - 3) * TILE, y: (MAP_H - 3) * TILE };
-  // make sure her tile is grass
+  fiona = { x: (MAP_W - 3) * TILE + TILE/2, y: (MAP_H - 3) * TILE + TILE/2 };
   map[MAP_H - 3][MAP_W - 3] = 0;
+  map[MAP_H - 4][MAP_W - 3] = 0;
+  map[MAP_H - 3][MAP_W - 4] = 0;
 }
 
 // ===== INPUT =====
@@ -249,27 +236,27 @@ window.addEventListener('keydown', e => {
 }, { passive: false });
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
-// Joystick (mobile)
 const joystick = document.getElementById('joystick');
 const stick = document.getElementById('stick');
-let joyActive = false;
-let joyDX = 0, joyDY = 0;
-const JOY_R = 65;
+let joyActive = false, joyDX = 0, joyDY = 0;
+const JOY_R = 60;
 
-function joyStart(e) {
+function joyHandler(e, type) {
   e.preventDefault();
-  joyActive = true;
-  joyMove(e);
-}
-function joyMove(e) {
+  if (type === 'start') joyActive = true;
+  if (type === 'end') {
+    joyActive = false;
+    joyDX = joyDY = 0;
+    stick.style.left = '50%';
+    stick.style.top = '50%';
+    return;
+  }
   if (!joyActive) return;
-  e.preventDefault();
   const t = e.touches ? e.touches[0] : e;
+  if (!t) return;
   const r = joystick.getBoundingClientRect();
-  const cx = r.left + r.width/2;
-  const cy = r.top + r.height/2;
-  let dx = t.clientX - cx;
-  let dy = t.clientY - cy;
+  let dx = t.clientX - (r.left + r.width/2);
+  let dy = t.clientY - (r.top + r.height/2);
   const dist = Math.hypot(dx, dy);
   if (dist > JOY_R) { dx = dx/dist*JOY_R; dy = dy/dist*JOY_R; }
   stick.style.left = (50 + dx/JOY_R*30) + '%';
@@ -277,35 +264,25 @@ function joyMove(e) {
   joyDX = dx / JOY_R;
   joyDY = dy / JOY_R;
 }
-function joyEnd(e) {
-  joyActive = false;
-  joyDX = joyDY = 0;
-  stick.style.left = '50%';
-  stick.style.top = '50%';
-}
-joystick.addEventListener('touchstart', joyStart, { passive: false });
-joystick.addEventListener('touchmove', joyMove, { passive: false });
-joystick.addEventListener('touchend', joyEnd);
-joystick.addEventListener('mousedown', joyStart);
-window.addEventListener('mousemove', joyMove);
-window.addEventListener('mouseup', joyEnd);
+joystick.addEventListener('touchstart', e => joyHandler(e, 'start'), { passive: false });
+joystick.addEventListener('touchmove', e => joyHandler(e, 'move'), { passive: false });
+joystick.addEventListener('touchend', e => joyHandler(e, 'end'));
+joystick.addEventListener('touchcancel', e => joyHandler(e, 'end'));
 
-// ===== COLLISION =====
+// ===== HELPERS =====
 function isBlocked(x, y) {
   const tx = Math.floor(x / TILE);
   const ty = Math.floor(y / TILE);
   if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
   const t = map[ty][tx];
-  return t === 1 || t === 2 || t === 3; // tree, water, rock
+  return t === 1 || t === 2 || t === 3;
 }
-
 function isMud(x, y) {
   const tx = Math.floor(x / TILE);
   const ty = Math.floor(y / TILE);
   if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
   return map[ty][tx] === 4;
 }
-
 function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 }
@@ -314,7 +291,6 @@ function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
 function update(dt) {
   if (!gameRunning) return;
 
-  // input vector
   let dx = 0, dy = 0;
   if (keys['w'] || keys['arrowup'] || keys['ц']) dy -= 1;
   if (keys['s'] || keys['arrowdown'] || keys['ы']) dy += 1;
@@ -322,11 +298,9 @@ function update(dt) {
   if (keys['d'] || keys['arrowright'] || keys['в']) dx += 1;
 
   if (joyActive && (Math.abs(joyDX) > 0.15 || Math.abs(joyDY) > 0.15)) {
-    dx = joyDX;
-    dy = joyDY;
+    dx = joyDX; dy = joyDY;
   }
 
-  // normalize
   const mag = Math.hypot(dx, dy);
   if (mag > 0) {
     dx /= mag; dy /= mag;
@@ -335,14 +309,12 @@ function update(dt) {
     player.bobFrame += dt * 8;
   }
 
-  // mud slows
   let speed = player.speed;
   if (isMud(player.x, player.y)) speed *= 0.5;
 
-  // move with collision (axis-separated)
   const newX = player.x + dx * speed;
   const newY = player.y + dy * speed;
-  const half = player.w / 2 - 4;
+  const half = player.w / 2 - 2;
 
   if (!isBlocked(newX - half, player.y - half) &&
       !isBlocked(newX + half, player.y - half) &&
@@ -357,43 +329,35 @@ function update(dt) {
     player.y = newY;
   }
 
-  // collect onions
   onions.forEach(o => {
-    if (!o.collected && Math.hypot(o.x - player.x, o.y - player.y) < 28) {
+    if (!o.collected && Math.hypot(o.x - player.x, o.y - player.y) < 26) {
       o.collected = true;
       collected++;
     }
     o.bob += dt * 3;
   });
 
-  // guards AI: simple patrol
   guards.forEach(g => {
     g.patrolT -= dt * 60;
     if (g.patrolT <= 0) {
-      g.vx = (Math.random() - 0.5) * 2;
-      g.vy = (Math.random() - 0.5) * 2;
+      g.vx = (Math.random() - 0.5) * 1.6;
+      g.vy = (Math.random() - 0.5) * 1.6;
       g.patrolT = 60 + Math.random() * 120;
     }
-    // chase if close
     const distP = Math.hypot(player.x - g.x, player.y - g.y);
-    if (distP < 180) {
-      const dxg = (player.x - g.x) / distP;
-      const dyg = (player.y - g.y) / distP;
-      g.vx = dxg * 1.5;
-      g.vy = dyg * 1.5;
+    if (distP < 150 && distP > 1) {
+      g.vx = (player.x - g.x) / distP * 1.4;
+      g.vy = (player.y - g.y) / distP * 1.4;
     }
-    const nx = g.x + g.vx;
-    const ny = g.y + g.vy;
+    const nx = g.x + g.vx, ny = g.y + g.vy;
     if (!isBlocked(nx, g.y)) g.x = nx; else g.vx *= -1;
     if (!isBlocked(g.x, ny)) g.y = ny; else g.vy *= -1;
 
-    // hit player
     if (player.invuln <= 0 &&
         rectsOverlap(g.x - g.w/2, g.y - g.h/2, g.w, g.h,
                      player.x - player.w/2, player.y - player.h/2, player.w, player.h)) {
       player.hp--;
       player.invuln = 90;
-      // knockback
       const ang = Math.atan2(player.y - g.y, player.x - g.x);
       player.x += Math.cos(ang) * 30;
       player.y += Math.sin(ang) * 30;
@@ -403,19 +367,16 @@ function update(dt) {
 
   if (player.invuln > 0) player.invuln -= dt * 60;
 
-  // win check
   if (collected >= ONIONS_TOTAL &&
-      Math.hypot(fiona.x - player.x, fiona.y - player.y) < 50) {
+      Math.hypot(fiona.x - player.x, fiona.y - player.y) < 45) {
     endGame(true);
   }
 
-  // camera
   camera.x = player.x - W/2;
   camera.y = player.y - H/2;
   camera.x = Math.max(0, Math.min(WORLD_W - W, camera.x));
   camera.y = Math.max(0, Math.min(WORLD_H - H, camera.y));
 
-  // hud
   elapsed = (performance.now() - startTime) / 1000;
   document.getElementById('onions').textContent = collected;
   document.getElementById('timer').textContent = Math.floor(elapsed);
@@ -425,131 +386,160 @@ function update(dt) {
 // ===== DRAW =====
 function drawTile(t, x, y) {
   switch (t) {
-    case 0: // grass
+    case 0:
       ctx.fillStyle = '#3d5a2b';
       ctx.fillRect(x, y, TILE, TILE);
-      // grass tufts
       ctx.fillStyle = '#4d6e35';
-      ctx.fillRect(x+8, y+10, 3, 6);
-      ctx.fillRect(x+22, y+24, 3, 6);
-      ctx.fillRect(x+30, y+8, 3, 6);
+      ctx.fillRect(x+8, y+10, 3, 5);
+      ctx.fillRect(x+22, y+24, 3, 5);
+      ctx.fillRect(x+30, y+8, 3, 5);
       break;
-    case 1: // tree
+    case 1:
       ctx.fillStyle = '#3d5a2b';
       ctx.fillRect(x, y, TILE, TILE);
-      // trunk
       ctx.fillStyle = '#5c3a1e';
-      ctx.fillRect(x + TILE/2 - 4, y + TILE - 14, 8, 14);
-      // foliage
+      ctx.fillRect(x + TILE/2 - 3, y + TILE - 12, 6, 12);
       ctx.fillStyle = '#1e3a14';
       ctx.beginPath();
-      ctx.arc(x + TILE/2, y + TILE/2 - 2, 18, 0, Math.PI*2);
+      ctx.arc(x + TILE/2, y + TILE/2 - 2, 17, 0, Math.PI*2);
       ctx.fill();
       ctx.fillStyle = '#2d4d1e';
       ctx.beginPath();
-      ctx.arc(x + TILE/2 - 5, y + TILE/2 - 6, 10, 0, Math.PI*2);
+      ctx.arc(x + TILE/2 - 5, y + TILE/2 - 6, 9, 0, Math.PI*2);
       ctx.fill();
       break;
-    case 2: // water
+    case 2:
       ctx.fillStyle = '#2a4a5e';
       ctx.fillRect(x, y, TILE, TILE);
       ctx.fillStyle = '#3d6a82';
       const wave = Math.sin((performance.now()/300) + x*0.1) * 2;
       ctx.fillRect(x + 4, y + 12 + wave, TILE - 8, 3);
-      ctx.fillRect(x + 8, y + 26 - wave, TILE - 16, 3);
       break;
-    case 3: // rock
+    case 3:
       ctx.fillStyle = '#3d5a2b';
       ctx.fillRect(x, y, TILE, TILE);
       ctx.fillStyle = '#7a7a7a';
       ctx.beginPath();
-      ctx.ellipse(x + TILE/2, y + TILE/2 + 4, 14, 10, 0, 0, Math.PI*2);
+      ctx.ellipse(x + TILE/2, y + TILE/2 + 4, 13, 9, 0, 0, Math.PI*2);
       ctx.fill();
       ctx.fillStyle = '#9a9a9a';
       ctx.beginPath();
-      ctx.ellipse(x + TILE/2 - 3, y + TILE/2, 8, 5, 0, 0, Math.PI*2);
+      ctx.ellipse(x + TILE/2 - 3, y + TILE/2, 7, 4, 0, 0, Math.PI*2);
       ctx.fill();
       break;
-    case 4: // mud
+    case 4:
       ctx.fillStyle = '#5c4628';
       ctx.fillRect(x, y, TILE, TILE);
       ctx.fillStyle = '#3d2e18';
-      ctx.fillRect(x + 6, y + 8, 6, 4);
-      ctx.fillRect(x + 22, y + 22, 8, 4);
+      ctx.fillRect(x + 6, y + 8, 5, 4);
+      ctx.fillRect(x + 22, y + 22, 7, 4);
       break;
   }
 }
 
 function drawShrek(sx, sy) {
   const bob = Math.sin(player.bobFrame) * 2;
-
-  if (shrekImgLoaded) {
-    // Use the real PNG
-    if (player.invuln > 0 && Math.floor(player.invuln / 6) % 2 === 0) {
-      ctx.globalAlpha = 0.4;
-    }
-    const size = 72;
-    // mirror for left direction
-    if (player.dir === 'left') {
-      ctx.save();
-      ctx.scale(-1, 1);
-      ctx.drawImage(shrekImg, -sx - size/2, sy - size/2 + bob, size, size);
-      ctx.restore();
-    } else {
-      ctx.drawImage(shrekImg, sx - size/2, sy - size/2 + bob, size, size);
-    }
-    ctx.globalAlpha = 1;
-    return;
-  }
-
-  // Fallback Shrek (drawn by code)
   if (player.invuln > 0 && Math.floor(player.invuln / 6) % 2 === 0) {
     ctx.globalAlpha = 0.4;
   }
+
   // shadow
-  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.fillStyle = 'rgba(0,0,0,.4)';
   ctx.beginPath();
-  ctx.ellipse(sx, sy + 18, 18, 6, 0, 0, Math.PI*2);
+  ctx.ellipse(sx, sy + 22, 18, 5, 0, 0, Math.PI*2);
   ctx.fill();
 
-  // body (shirt)
-  ctx.fillStyle = '#e8dcc4';
+  // legs (brown pants)
+  ctx.fillStyle = '#5c4628';
+  ctx.fillRect(sx - 9, sy + 12 + bob, 7, 12);
+  ctx.fillRect(sx + 2, sy + 12 + bob, 7, 12);
+
+  // shirt body (cream)
+  ctx.fillStyle = '#d8cca8';
   ctx.beginPath();
-  ctx.ellipse(sx, sy + 6 + bob, 16, 14, 0, 0, Math.PI*2);
+  ctx.ellipse(sx, sy + 8 + bob, 15, 13, 0, 0, Math.PI*2);
   ctx.fill();
-  // vest
+
+  // brown vest
   ctx.fillStyle = '#5c3a1e';
-  ctx.fillRect(sx - 14, sy - 2 + bob, 8, 14);
-  ctx.fillRect(sx + 6, sy - 2 + bob, 8, 14);
+  ctx.fillRect(sx - 14, sy + 1 + bob, 7, 14);
+  ctx.fillRect(sx + 7, sy + 1 + bob, 7, 14);
+  // vest texture
+  ctx.fillStyle = '#3d2818';
+  ctx.fillRect(sx - 13, sy + 4 + bob, 5, 1);
+  ctx.fillRect(sx - 13, sy + 9 + bob, 5, 1);
+  ctx.fillRect(sx + 8, sy + 4 + bob, 5, 1);
+  ctx.fillRect(sx + 8, sy + 9 + bob, 5, 1);
 
-  // head (green)
+  // green arms
   ctx.fillStyle = '#7ba24a';
   ctx.beginPath();
-  ctx.arc(sx, sy - 10 + bob, 14, 0, Math.PI*2);
+  ctx.ellipse(sx - 14, sy + 6 + bob, 4, 7, 0, 0, Math.PI*2);
   ctx.fill();
-  // ears (trumpet)
+  ctx.beginPath();
+  ctx.ellipse(sx + 14, sy + 6 + bob, 4, 7, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // head (green) - large round
   ctx.fillStyle = '#7ba24a';
   ctx.beginPath();
-  ctx.ellipse(sx - 14, sy - 10 + bob, 5, 3, -0.3, 0, Math.PI*2);
+  ctx.arc(sx, sy - 8 + bob, 14, 0, Math.PI*2);
   ctx.fill();
+  // face highlight
+  ctx.fillStyle = '#8fb55a';
   ctx.beginPath();
-  ctx.ellipse(sx + 14, sy - 10 + bob, 5, 3, 0.3, 0, Math.PI*2);
+  ctx.arc(sx - 3, sy - 11 + bob, 7, 0, Math.PI*2);
   ctx.fill();
-  // eyes
+
+  // ears (trumpet shape)
+  ctx.fillStyle = '#7ba24a';
+  // left ear
+  ctx.beginPath();
+  ctx.moveTo(sx - 13, sy - 10 + bob);
+  ctx.lineTo(sx - 19, sy - 14 + bob);
+  ctx.lineTo(sx - 18, sy - 8 + bob);
+  ctx.closePath();
+  ctx.fill();
+  // right ear
+  ctx.beginPath();
+  ctx.moveTo(sx + 13, sy - 10 + bob);
+  ctx.lineTo(sx + 19, sy - 14 + bob);
+  ctx.lineTo(sx + 18, sy - 8 + bob);
+  ctx.closePath();
+  ctx.fill();
+
+  // eyes (white)
   ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(sx - 5, sy - 12 + bob, 3, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(sx + 5, sy - 12 + bob, 3, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(sx - 5, sy - 11 + bob, 3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(sx + 5, sy - 11 + bob, 3, 0, Math.PI*2); ctx.fill();
+  // pupils (look in dir)
+  ctx.fillStyle = '#3d2818';
   const eyeOffX = player.dir === 'left' ? -1 : player.dir === 'right' ? 1 : 0;
   const eyeOffY = player.dir === 'up' ? -1 : player.dir === 'down' ? 1 : 0;
-  ctx.beginPath(); ctx.arc(sx - 5 + eyeOffX, sy - 12 + eyeOffY + bob, 1.5, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(sx + 5 + eyeOffX, sy - 12 + eyeOffY + bob, 1.5, 0, Math.PI*2); ctx.fill();
-  // mouth
-  ctx.strokeStyle = '#3d2618';
+  ctx.beginPath(); ctx.arc(sx - 5 + eyeOffX, sy - 11 + eyeOffY + bob, 1.6, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(sx + 5 + eyeOffX, sy - 11 + eyeOffY + bob, 1.6, 0, Math.PI*2); ctx.fill();
+
+  // brows
+  ctx.strokeStyle = '#3d2818';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(sx - 8, sy - 14 + bob);
+  ctx.lineTo(sx - 2, sy - 15 + bob);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(sx + 2, sy - 15 + bob);
+  ctx.lineTo(sx + 8, sy - 14 + bob);
+  ctx.stroke();
+
+  // smile
+  ctx.strokeStyle = '#3d2818';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(sx, sy - 6 + bob, 4, 0.2, Math.PI - 0.2);
+  ctx.arc(sx, sy - 4 + bob, 4, 0.2, Math.PI - 0.2);
   ctx.stroke();
+  // teeth
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(sx - 2, sy - 3 + bob, 4, 2);
 
   ctx.globalAlpha = 1;
 }
@@ -558,59 +548,52 @@ function drawOnion(o) {
   if (o.collected) return;
   const x = o.x - camera.x;
   const y = o.y - camera.y + Math.sin(o.bob) * 3;
-  // shadow
   ctx.fillStyle = 'rgba(0,0,0,.3)';
   ctx.beginPath();
   ctx.ellipse(x, y + 14, 8, 3, 0, 0, Math.PI*2);
   ctx.fill();
-  // bulb
   ctx.fillStyle = '#e8c89a';
   ctx.beginPath();
-  ctx.ellipse(x, y, 8, 10, 0, 0, Math.PI*2);
+  ctx.ellipse(x, y, 7, 9, 0, 0, Math.PI*2);
   ctx.fill();
-  // stripes
   ctx.strokeStyle = '#a08560';
   ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(x - 6, y - 2); ctx.quadraticCurveTo(x, y + 4, x + 6, y - 2); ctx.stroke();
-  // green sprout
+  ctx.beginPath();
+  ctx.moveTo(x - 5, y - 2);
+  ctx.quadraticCurveTo(x, y + 3, x + 5, y - 2);
+  ctx.stroke();
   ctx.fillStyle = '#5c8a3a';
-  ctx.fillRect(x - 1, y - 14, 2, 6);
+  ctx.fillRect(x - 1, y - 13, 2, 5);
   ctx.fillStyle = '#7ba24a';
   ctx.beginPath();
-  ctx.ellipse(x - 3, y - 13, 3, 1.5, -0.5, 0, Math.PI*2);
+  ctx.ellipse(x - 3, y - 12, 3, 1.5, -0.5, 0, Math.PI*2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(x + 3, y - 13, 3, 1.5, 0.5, 0, Math.PI*2);
+  ctx.ellipse(x + 3, y - 12, 3, 1.5, 0.5, 0, Math.PI*2);
   ctx.fill();
 }
 
 function drawGuard(g) {
   const x = g.x - camera.x;
   const y = g.y - camera.y;
-  // shadow
   ctx.fillStyle = 'rgba(0,0,0,.3)';
   ctx.beginPath();
-  ctx.ellipse(x, y + 14, 12, 4, 0, 0, Math.PI*2);
+  ctx.ellipse(x, y + 14, 11, 4, 0, 0, Math.PI*2);
   ctx.fill();
-  // body (red tunic)
   ctx.fillStyle = '#a83232';
-  ctx.fillRect(x - 10, y - 4, 20, 16);
-  // head
+  ctx.fillRect(x - 9, y - 3, 18, 15);
   ctx.fillStyle = '#e8b890';
   ctx.beginPath();
-  ctx.arc(x, y - 10, 8, 0, Math.PI*2);
+  ctx.arc(x, y - 9, 7, 0, Math.PI*2);
   ctx.fill();
-  // helmet
   ctx.fillStyle = '#888';
   ctx.beginPath();
-  ctx.arc(x, y - 12, 9, Math.PI, 0);
+  ctx.arc(x, y - 11, 8, Math.PI, 0);
   ctx.fill();
-  ctx.fillRect(x - 9, y - 13, 18, 3);
-  // angry eyes
+  ctx.fillRect(x - 8, y - 12, 16, 3);
   ctx.fillStyle = '#000';
-  ctx.fillRect(x - 4, y - 9, 2, 2);
-  ctx.fillRect(x + 2, y - 9, 2, 2);
-  // spear
+  ctx.fillRect(x - 4, y - 8, 2, 2);
+  ctx.fillRect(x + 2, y - 8, 2, 2);
   ctx.strokeStyle = '#5c3a1e';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -629,141 +612,111 @@ function drawFiona() {
   const x = fiona.x - camera.x;
   const y = fiona.y - camera.y;
   const bob = Math.sin(performance.now() / 300) * 2;
-  // sparkle ring (signaling final point)
   ctx.strokeStyle = collected >= ONIONS_TOTAL ? '#ffe066' : '#888';
   ctx.lineWidth = 2;
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
-  ctx.arc(x, y, 30, 0, Math.PI*2);
+  ctx.arc(x, y, 28, 0, Math.PI*2);
   ctx.stroke();
   ctx.setLineDash([]);
-  // shadow
   ctx.fillStyle = 'rgba(0,0,0,.3)';
   ctx.beginPath();
-  ctx.ellipse(x, y + 18, 14, 4, 0, 0, Math.PI*2);
+  ctx.ellipse(x, y + 18, 13, 4, 0, 0, Math.PI*2);
   ctx.fill();
-  // dress
   ctx.fillStyle = '#4a8a3a';
   ctx.beginPath();
-  ctx.moveTo(x - 12, y + 14 + bob);
-  ctx.lineTo(x - 8, y - 4 + bob);
-  ctx.lineTo(x + 8, y - 4 + bob);
-  ctx.lineTo(x + 12, y + 14 + bob);
+  ctx.moveTo(x - 11, y + 14 + bob);
+  ctx.lineTo(x - 7, y - 4 + bob);
+  ctx.lineTo(x + 7, y - 4 + bob);
+  ctx.lineTo(x + 11, y + 14 + bob);
   ctx.closePath();
   ctx.fill();
-  // head
   ctx.fillStyle = '#ffd9b3';
   ctx.beginPath();
-  ctx.arc(x, y - 10 + bob, 9, 0, Math.PI*2);
+  ctx.arc(x, y - 9 + bob, 8, 0, Math.PI*2);
   ctx.fill();
-  // red hair
   ctx.fillStyle = '#c84a1e';
   ctx.beginPath();
-  ctx.arc(x, y - 14 + bob, 10, Math.PI, 0);
+  ctx.arc(x, y - 13 + bob, 9, Math.PI, 0);
   ctx.fill();
-  ctx.fillRect(x - 10, y - 14 + bob, 4, 14);
-  ctx.fillRect(x + 6, y - 14 + bob, 4, 14);
-  // eyes
+  ctx.fillRect(x - 9, y - 13 + bob, 4, 12);
+  ctx.fillRect(x + 5, y - 13 + bob, 4, 12);
   ctx.fillStyle = '#000';
-  ctx.fillRect(x - 4, y - 10 + bob, 1.5, 2);
-  ctx.fillRect(x + 3, y - 10 + bob, 1.5, 2);
-  // smile
+  ctx.fillRect(x - 4, y - 9 + bob, 1.5, 2);
+  ctx.fillRect(x + 3, y - 9 + bob, 1.5, 2);
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(x, y - 7 + bob, 2, 0, Math.PI);
+  ctx.arc(x, y - 6 + bob, 2, 0, Math.PI);
   ctx.stroke();
-  // hint label
   if (collected < ONIONS_TOTAL) {
     ctx.fillStyle = 'rgba(0,0,0,.7)';
-    ctx.fillRect(x - 70, y - 38, 140, 18);
+    ctx.fillRect(x - 60, y - 36, 120, 16);
     ctx.fillStyle = '#fff';
-    ctx.font = '12px Trebuchet MS';
+    ctx.font = '11px Trebuchet MS';
     ctx.textAlign = 'center';
-    ctx.fillText('Собери все луковицы! 🧅', x, y - 25);
+    ctx.fillText('Собери луковицы! 🧅', x, y - 24);
   } else {
     ctx.fillStyle = 'rgba(255, 224, 102, .9)';
-    ctx.fillRect(x - 50, y - 38, 100, 18);
+    ctx.fillRect(x - 50, y - 36, 100, 16);
     ctx.fillStyle = '#000';
-    ctx.font = 'bold 12px Trebuchet MS';
+    ctx.font = 'bold 11px Trebuchet MS';
     ctx.textAlign = 'center';
-    ctx.fillText('Подойди ко мне! 💚', x, y - 25);
+    ctx.fillText('Подойди! 💚', x, y - 24);
   }
 }
 
 function draw() {
   ctx.clearRect(0, 0, W, H);
-
-  // tiles in viewport
   const x0 = Math.max(0, Math.floor(camera.x / TILE));
   const y0 = Math.max(0, Math.floor(camera.y / TILE));
   const x1 = Math.min(MAP_W, Math.ceil((camera.x + W) / TILE));
   const y1 = Math.min(MAP_H, Math.ceil((camera.y + H) / TILE));
-  for (let y = y0; y < y1; y++) {
-    for (let x = x0; x < x1; x++) {
+  for (let y = y0; y < y1; y++)
+    for (let x = x0; x < x1; x++)
       drawTile(map[y][x], x*TILE - camera.x, y*TILE - camera.y);
-    }
-  }
-
-  // entities
   onions.forEach(drawOnion);
   drawFiona();
   guards.forEach(drawGuard);
-
-  // player
   drawShrek(player.x - camera.x, player.y - camera.y);
 }
 
 // ===== GAME FLOW =====
-function showMessage(title, text, btnLabel, onClick) {
-  const m = document.getElementById('message');
-  document.getElementById('msg-title').textContent = title;
-  document.getElementById('msg-text').innerHTML = text;
-  const btn = document.getElementById('msg-btn');
-  btn.textContent = btnLabel;
-  btn.onclick = () => {
-    m.style.display = 'none';
+function showMessage(html, btnLabel, onClick) {
+  messageEl.innerHTML = html + '<button id="msg-btn">' + btnLabel + '</button>';
+  document.getElementById('msg-btn').onclick = () => {
+    messageEl.classList.add('hidden');
     onClick();
   };
-  m.style.display = 'block';
+  messageEl.classList.remove('hidden');
 }
 
 function startGame() {
   generateMap();
-  setupEntities();
-  player.x = 15 * TILE;
-  player.y = 10 * TILE;
-  player.hp = 3;
-  player.invuln = 0;
+  player.x = 12 * TILE; player.y = 9 * TILE;
+  player.hp = 3; player.invuln = 0;
   collected = 0;
+  setupEntities();
   startTime = performance.now();
   gameRunning = true;
-  gameWon = false;
 }
 
 function endGame(won) {
   gameRunning = false;
-  gameWon = won;
   const t = Math.floor(elapsed);
   if (won) {
     const best = +(localStorage.getItem('shrek-best') || 9999);
     if (t < best) localStorage.setItem('shrek-best', t);
     const bestNow = localStorage.getItem('shrek-best');
     showMessage(
-      '💚 Шрек нашёл Фиону!',
-      `Ты собрал все луковицы и спас принцессу! 🎉<br><br>
-       Время: <b>${t}с</b><br>
-       Лучший рекорд: <b>${bestNow}с</b>`,
+      '<h1>💚 Шрек нашёл Фиону!</h1><p>Спас принцессу! 🎉<br><br>Время: <b>' + t + 'с</b><br>Рекорд: <b>' + bestNow + 'с</b></p>',
       'Сыграть снова',
       startGame
     );
   } else {
     showMessage(
-      '💀 Шрека поймала стража!',
-      `Стражники Фаркуада оказались сильнее...<br><br>
-       Луковиц собрано: <b>${collected}/${ONIONS_TOTAL}</b><br>
-       Время: <b>${t}с</b>`,
-      'Попробовать снова',
+      '<h1>💀 Поймали!</h1><p>Стражники Фаркуада сильнее...<br><br>Луковиц: <b>' + collected + '/' + ONIONS_TOTAL + '</b><br>Время: <b>' + t + 'с</b></p>',
+      'Снова',
       startGame
     );
   }
@@ -775,28 +728,26 @@ function loop() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
-  update(dt);
-  draw();
+  try {
+    update(dt);
+    draw();
+  } catch(e) {
+    console.error(e);
+  }
   requestAnimationFrame(loop);
 }
 
-// ===== START =====
-showMessage(
-  '🟢 Shrek\'s Swamp Adventure',
-  `Помоги Шреку найти Фиону на болоте!<br><br>
-   🧅 Собери все <b>10 луковиц</b><br>
-   🛡️ Не попадайся <b>стражникам Фаркуада</b><br>
-   👸 Подойди к <b>Фионе</b>, когда соберёшь всё<br><br>
-   <b>Управление:</b><br>
-   💻 WASD или стрелки<br>
-   📱 Джойстик внизу слева`,
-  'Начать! 💚',
-  startGame
-);
+// Initial map for menu background
+generateMap();
+setupEntities();
 
+// Hook button
+msgBtn.addEventListener('click', startGame);
+
+// Start render loop
 loop();
 
-// resize handling: fit canvas to window keeping aspect
+// Resize
 function fit() {
   const wrap = document.getElementById('game-wrap');
   const ratio = W / H;
@@ -808,7 +759,10 @@ function fit() {
   canvas.style.height = ch + 'px';
 }
 window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', () => setTimeout(fit, 100));
 fit();
+
+})();
 </script>
 </body>
 </html>
